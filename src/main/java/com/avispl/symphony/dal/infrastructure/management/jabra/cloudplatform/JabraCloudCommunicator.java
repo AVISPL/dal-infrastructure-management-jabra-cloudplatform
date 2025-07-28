@@ -1,0 +1,701 @@
+/*
+ * Copyright (c) 2025 AVI-SPL, Inc. All Rights Reserved.
+ */
+package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import javax.security.auth.login.FailedLoginException;
+import org.apache.commons.collections.CollectionUtils;
+
+import com.avispl.symphony.api.common.error.NotImplementedException;
+import com.avispl.symphony.api.dal.control.Controller;
+import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
+import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty.Button;
+import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
+import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
+import com.avispl.symphony.api.dal.dto.monitor.Statistics;
+import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
+import com.avispl.symphony.api.dal.error.ResourceNotReachableException;
+import com.avispl.symphony.api.dal.monitor.Monitorable;
+import com.avispl.symphony.api.dal.monitor.aggregator.Aggregator;
+import com.avispl.symphony.dal.communicator.RestCommunicator;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bases.BaseProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.RequestStateHandler;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Computer;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.JabraClient;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.requests.SettingsRequest;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.DeviceOverview;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.Room;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AGeneralProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ClientProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ComputerProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.GeneralProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.RoomProperty;
+import com.avispl.symphony.dal.util.StringUtils;
+
+/**
+ * Main adapter class for Jabra Cloud Platform.
+ * Responsible for generating monitoring, controllable, and aggregated devices.
+ *
+ * @author Kevin / Symphony Dev Team
+ * @since 1.0.0
+ */
+public class JabraCloudCommunicator extends RestCommunicator implements Monitorable, Controller, Aggregator {
+	/**
+	 * Lock for thread-safe operations.
+	 */
+	private final ReentrantLock reentrantLock;
+	/**
+	 * Application configuration loaded from {@code version.properties}.
+	 */
+	private final Properties versionProperties;
+	/**
+	 * Jackson object mapper for JSON serialization and deserialization.
+	 */
+	private final ObjectMapper objectMapper;
+
+	/**
+	 * Device adapter instantiation timestamp.
+	 */
+	private Long adapterInitializationTimestamp;
+	/**
+	 * Duration (in milliseconds) of the last monitoring cycle.
+	 */
+	public Long lastMonitoringCycleDuration;
+	/**
+	 * Executes asynchronous tasks for data loader.
+	 */
+	private ExecutorService executorService;
+	/**
+	 * Loads data from APIs for aggregated devices.
+	 */
+	private JabraCloudDataLoader dataLoader;
+	/**
+	 * Stores extended statistics to be sent to the aggregator.
+	 */
+	private ExtendedStatistics localExtendedStatistics;
+	/**
+	 * Stores local representations of aggregated devices.
+	 */
+	private List<AggregatedDevice> localAggregatedDevices;
+	/**
+	 * Handles request status tracking and error detection.
+	 */
+	private RequestStateHandler requestStateHandler;
+	/**
+	 * Dummy control property used when no controllable properties are available from devices.
+	 */
+	private AdvancedControllableProperty dummyControllableProperty;
+	/**
+	 * List of devices fetched from the {@link ApiConstant#GET_DEVICES_ENDPOINT}.
+	 */
+	private List<Device> devices;
+	/**
+	 * Mapping of device IDs to their corresponding settings from the {@link ApiConstant#GET_DEVICE_SETTINGS_ENDPOINT}
+	 */
+	private Map<String, Settings> devicesSettings;
+	/**
+	 * List of overview devices collected from all rooms.
+	 */
+	private List<DeviceOverview> devicesRooms;
+	/**
+	 * List of rooms retrieved from {@link ApiConstant#GET_ROOMS_ENDPOINT} based on current devices.
+	 */
+	private List<Room> rooms;
+
+	public JabraCloudCommunicator() {
+		this.reentrantLock = new ReentrantLock();
+		this.versionProperties = new Properties();
+		this.adapterInitializationTimestamp = System.currentTimeMillis();
+		this.lastMonitoringCycleDuration = 0L;
+		this.objectMapper = new ObjectMapper();
+
+		this.localExtendedStatistics = new ExtendedStatistics();
+		this.localAggregatedDevices = new ArrayList<>();
+		this.requestStateHandler = new RequestStateHandler();
+		this.dummyControllableProperty = new AdvancedControllableProperty(null, null, new Button(), null);
+		this.devices = new ArrayList<>();
+		this.devicesRooms = new ArrayList<>();
+		this.devicesSettings = new HashMap<>();
+		this.rooms = new ArrayList<>();
+	}
+
+	@Override
+	protected void internalInit() throws Exception {
+		this.logger.info(Constant.INITIAL_INTERNAL_INFO + this);
+		this.setTrustAllCertificates(true);
+		this.setAuthenticationScheme(AuthenticationScheme.None);
+		this.loadProperties(this.versionProperties);
+		super.internalInit();
+	}
+
+	@Override
+	public List<Statistics> getMultipleStatistics() throws Exception {
+		this.reentrantLock.lock();
+		try {
+			this.setupData();
+			Map<String, String> statistics = new HashMap<>();
+			statistics.putAll(this.getGeneralProperties());
+			statistics.putAll(this.getRoomProperties());
+
+			List<AdvancedControllableProperty> controllableProperties = this.getRoomControllers();
+			Optional.of(controllableProperties).filter(List::isEmpty).ifPresent(l -> l.add(this.dummyControllableProperty));
+
+			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
+			extendedStatistics.setStatistics(statistics);
+			extendedStatistics.setControllableProperties(controllableProperties);
+			this.localExtendedStatistics = extendedStatistics;
+		} finally {
+			this.reentrantLock.unlock();
+		}
+		return Collections.singletonList(this.localExtendedStatistics);
+	}
+
+	@Override
+	public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
+		if (CollectionUtils.isEmpty(this.devices)) {
+			return Collections.emptyList();
+		}
+		this.setupDataLoader();
+		List<AggregatedDevice> aggregatedDevices = new ArrayList<>();
+		this.devices.forEach(device -> {
+			AggregatedDevice aggregatedDevice = new AggregatedDevice();
+			aggregatedDevice.setDeviceId(device.getId());
+			aggregatedDevice.setDeviceName(device.getName());
+			aggregatedDevice.setDeviceOnline(device.getConnected());
+			aggregatedDevice.setSerialNumber(device.getSerialNumber());
+
+			Settings deviceSettings = Optional.ofNullable(this.devicesSettings.get(device.getId())).orElse(new Settings());
+			Map<String, String> properties = new HashMap<>();
+			properties.putAll(this.getAGeneralProperties(device));
+			properties.putAll(this.getAComputerProperties(device.getComputer()));
+			properties.putAll(this.getAJabraClientProperties(device.getJabraClient()));
+			properties.putAll(this.getASettingsProperties(device.getConnected(), deviceSettings));
+
+			List<AdvancedControllableProperty> controllableProperties = this.getASettingsControllers(device.getConnected(), deviceSettings);
+			Optional.of(controllableProperties).filter(List::isEmpty).ifPresent(l -> l.add(this.dummyControllableProperty));
+
+			aggregatedDevice.setProperties(properties);
+			aggregatedDevice.setControllableProperties(controllableProperties);
+			aggregatedDevices.add(aggregatedDevice);
+		});
+		this.localAggregatedDevices = aggregatedDevices;
+		this.versionProperties.setProperty(GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getProperty(), String.valueOf(this.lastMonitoringCycleDuration));
+		this.versionProperties.setProperty(GeneralProperty.MONITORED_DEVICES_TOTAL.getProperty(), String.valueOf(this.localAggregatedDevices.size()));
+		return this.localAggregatedDevices;
+	}
+
+	@Override
+	public List<AggregatedDevice> retrieveMultipleStatistics(List<String> list) throws Exception {
+		return this.retrieveMultipleStatistics().stream()
+				.filter(aggregatedDevice -> list.contains(aggregatedDevice.getDeviceId()))
+				.collect(Collectors.toList());
+	}
+
+	@Override
+	public void controlProperty(ControllableProperty controllableProperty) throws Exception {
+		this.reentrantLock.lock();
+		try {
+			String[] controllerParts = controllableProperty.getProperty().split(Constant.HASH_SYMBOL);
+			String[] groupParts = controllerParts[0].split(Constant.UNDERSCORE);
+			String groupName = groupParts[0];
+			String propertyName = controllerParts[1];
+			switch (groupName) {
+				case Constant.ROOM_GROUP:
+					if (propertyName.equals(RoomProperty.REBOOT_ALL_DEVICES.getName())) {
+						int groupIndex = Integer.parseInt(groupParts[groupParts.length - 1]) - 1;
+						String roomID = this.rooms.get(groupIndex).getId();
+						String url = ApiConstant.POST_REBOOT_DEVICES_ENDPOINT.replace(ApiConstant.ROOM_ID_PARAM, roomID);
+
+						this.performControlOperation(HttpMethod.POST, url, null);
+					}
+					break;
+				case Constant.AGGREGATED_SETTINGS_GROUP:
+					SettingProperty settingProperty = BaseProperty.getByName(SettingProperty.class, propertyName);
+					String settingValue = BaseProperty.getByName(settingProperty.getType(), controllableProperty.getValue().toString()).getValue();
+					String url = ApiConstant.PATCH_DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, controllableProperty.getDeviceId());
+					SettingsRequest settingsRequest = new SettingsRequest(settingProperty.getApiField(), settingValue);
+
+					this.performControlOperation(HttpMethod.PATCH, url, settingsRequest);
+					break;
+				default:
+					break;
+			}
+		} finally {
+			this.reentrantLock.unlock();
+		}
+	}
+
+	@Override
+	public void controlProperties(List<ControllableProperty> controllableProperties) throws Exception {
+		if (CollectionUtils.isEmpty(controllableProperties)) {
+			this.logger.warn(Constant.CONTROLLABLE_PROPS_EMPTY_WARNING);
+			return;
+		}
+		controllableProperties.forEach(controllableProperty -> {
+			try {
+				this.controlProperty(controllableProperty);
+			} catch (Exception e) {
+				this.logger.error(Constant.CONTROL_PROPERTY_FAILED + controllableProperty.getProperty(), e);
+			}
+		});
+	}
+
+	@Override
+	protected void authenticate() throws Exception {
+		if (StringUtils.isNullOrEmpty(this.getPassword())) {
+			throw new FailedLoginException(Constant.LOGIN_FAILED);
+		}
+	}
+
+	@Override
+	protected HttpHeaders putExtraRequestHeaders(HttpMethod httpMethod, String uri, HttpHeaders headers) throws Exception {
+		this.authenticate();
+		headers.set(ApiConstant.API_KEY_HEADER, this.getPassword());
+		headers.set(ApiConstant.API_VERSION_HEADER, "2");
+		headers.setContentType(MediaType.APPLICATION_JSON);
+
+		return super.putExtraRequestHeaders(httpMethod, uri, headers);
+	}
+
+	@Override
+	protected void internalDestroy() {
+		this.logger.info(Constant.DESTROY_INTERNAL_INFO + this);
+
+		this.rooms = null;
+		this.devicesSettings = null;
+		this.devicesRooms = null;
+		this.devices = null;
+		this.dummyControllableProperty = null;
+		this.requestStateHandler = null;
+		this.localAggregatedDevices = null;
+		this.localExtendedStatistics = null;
+		if (this.executorService != null) {
+			this.executorService.shutdownNow();
+			this.executorService = null;
+		}
+		if (this.dataLoader != null) {
+			this.dataLoader.stop();
+			this.dataLoader = null;
+		}
+		this.adapterInitializationTimestamp = 0L;
+		this.lastMonitoringCycleDuration = 0L;
+		super.internalDestroy();
+	}
+
+	/**
+	 * Loads version properties and sets initial values used to create general properties
+	 * for the aggregator device.
+	 *
+	 * @param properties the properties to load and update
+	 */
+	private void loadProperties(Properties properties) {
+		try {
+			properties.load(this.getClass().getResourceAsStream("/version.properties"));
+			properties.setProperty(GeneralProperty.ADAPTER_UPTIME.getProperty(), String.valueOf(this.adapterInitializationTimestamp));
+			properties.setProperty(GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getProperty(), "0");
+			properties.setProperty(GeneralProperty.MONITORED_DEVICES_TOTAL.getProperty(), "0");
+		} catch (IOException e) {
+			this.logger.error(Constant.READ_PROPERTIES_FILE_FAILED + e.getMessage());
+		}
+	}
+
+	/**
+	 * Initializes and sets up data for devices and rooms.
+	 * <p>
+	 * This method performs the following steps:
+	 * <ul>
+	 *   <li>Clears existing {@code devicesRooms} and {@code rooms}.</li>
+	 *   <li>Fetches the list of devices from the API.</li>
+	 *   <li>For each device's group ID, retrieves the associated room and its devices.</li>
+	 *   <li>Populates the {@code rooms} and {@code devicesRooms} lists accordingly.</li>
+	 *   <li>Validates the API request state via {@code requestStateHandler}.</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * @throws FailedLoginException if authentication fails during API calls
+	 */
+	private void setupData() throws FailedLoginException {
+		this.devicesRooms.clear();
+		this.rooms.clear();
+		this.devices = this.fetchData(ApiConstant.GET_DEVICES_ENDPOINT, ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE);
+		if (CollectionUtils.isEmpty(this.devices)) {
+			return;
+		}
+		List<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toList());
+		for (String groupId : groupIDs) {
+			String url = ApiConstant.GET_ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
+			Room room = Optional.ofNullable(this.fetchData(url, Room.class)).orElse(new Room());
+
+			this.rooms.add(room);
+			this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
+		}
+		this.requestStateHandler.verifyAPIState();
+	}
+
+	/**
+	 * Sets up the data loader to collect and update data for aggregated devices.
+	 * <p>
+	 * This method initializes a single-thread executor and submits a {@link JabraCloudDataLoader}
+	 * task to it if not already initialized. It also updates the collection time and retrieves valid statistics.
+	 * Additionally, it updates the device connection status for each device based on {@code devicesRooms}.
+	 * </p>
+	 */
+	private void setupDataLoader() {
+		if (this.executorService == null) {
+			this.executorService = Executors.newFixedThreadPool(1);
+			this.dataLoader = new JabraCloudDataLoader(this, this.devices, this.devicesSettings);
+			this.executorService.submit(this.dataLoader);
+		}
+		this.dataLoader.nextCollectionTime = System.currentTimeMillis();
+		this.dataLoader.updateValidRetrieveStatisticsTimestamp();
+		this.devices.replaceAll(device -> {
+			String deviceConnectionStatus = this.devicesRooms.stream()
+					.filter(deviceRoom -> deviceRoom.getId().equals(device.getId())).findFirst()
+					.map(DeviceOverview::getDeviceConnectionStatus).orElse(null);
+
+			device.setDeviceConnectionStatus(deviceConnectionStatus);
+			return device;
+		});
+	}
+
+	/**
+	 * Retrieves general properties related to the adapter's version and status.
+	 * <p>Uses {@link Util#mapToGeneralProperty(GeneralProperty, Properties)} to map each property.</p>
+	 *
+	 * @return a map of general property names and their corresponding values
+	 */
+	private Map<String, String> getGeneralProperties() {
+		return this.generateProperties(
+				GeneralProperty.values(),
+				null,
+				property -> Util.mapToGeneralProperty(property, this.versionProperties)
+		);
+	}
+
+	/**
+	 * Retrieves properties for each room and groups them accordingly.
+	 * <p>Each room's properties are prefixed with a group name (e.g., JabraRoom_01, JabraRoom_02, ...).</p>
+	 * <p>If no rooms are available, logs a warning and returns an empty map.</p>
+	 *
+	 * @return a map of grouped room property names and their corresponding values
+	 */
+	private Map<String, String> getRoomProperties() {
+		if (CollectionUtils.isEmpty(this.rooms)) {
+			this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, Constant.ROOM_GROUP));
+			return Collections.emptyMap();
+		}
+		Map<String, String> properties = new HashMap<>();
+		for (int i = 0; i < this.rooms.size(); i++) {
+			Room room = this.rooms.get(i);
+			String groupName = String.format(Constant.GROUP_FORMAT, Constant.ROOM_GROUP, i + 1);
+			properties.putAll(this.generateProperties(
+					RoomProperty.values(), groupName, property -> Util.mapToRoomProperty(property, room)
+			));
+		}
+
+		return properties;
+	}
+
+	/**
+	 * Retrieves a map of general properties for the Aggregated device.
+	 *
+	 * @param device the {@link Device} to extract properties from
+	 * @return a map of property names and their corresponding values, or an empty map if device is null
+	 */
+	private Map<String, String> getAGeneralProperties(Device device) {
+		if (device == null) {
+			return Collections.emptyMap();
+		}
+		return this.generateProperties(
+				AGeneralProperty.values(),
+				null,
+				property -> Util.mapToAGeneralProperty(property, device)
+		);
+	}
+
+	/**
+	 * Retrieves a map of computer properties for the Aggregated device.
+	 *
+	 * @param computer the {@link Computer} to extract properties from
+	 * @return a map of property names and their corresponding values, or an empty map if computer is null
+	 */
+	private Map<String, String> getAComputerProperties(Computer computer) {
+		if (computer == null) {
+			return Collections.emptyMap();
+		}
+		return this.generateProperties(
+				ComputerProperty.values(),
+				Constant.AGGREGATED_COMPUTER_GROUP,
+				property -> Util.mapToAComputerProperty(property, computer)
+		);
+	}
+
+	/**
+	 * Retrieves a map of client properties for the Aggregated device.
+	 *
+	 * @param client the {@link JabraClient} to extract properties from
+	 * @return a map of property names and their corresponding values, or an empty map if client is null
+	 */
+	private Map<String, String> getAJabraClientProperties(JabraClient client) {
+		if (client == null) {
+			return Collections.emptyMap();
+		}
+		return this.generateProperties(
+				ClientProperty.values(),
+				Constant.AGGREGATED_CLIENT_GROUP,
+				property -> Util.mapToAClientProperty(property, client)
+		);
+	}
+
+	/**
+	 * Retrieves a map of settings properties and their selected values.
+	 * <p>If the device is connected, values will be marked as {@link Constant#NOT_AVAILABLE}.</p>
+	 *
+	 * @param isConnectedDevice indicates if the device is connected
+	 * @param settings the {@link Settings} to extract properties from
+	 * @return a map of setting names and their selected values, or an empty map if settings is null
+	 */
+	private Map<String, String> getASettingsProperties(Boolean isConnectedDevice, Settings settings) {
+		if (settings.isNull()) {
+			return Collections.emptyMap();
+		}
+		return this.generateProperties(
+				SettingProperty.values(),
+				Constant.AGGREGATED_SETTINGS_GROUP,
+				property -> Boolean.FALSE.equals(isConnectedDevice)
+						? Util.mapToASettingsProperty(property, settings)
+						: Constant.NOT_AVAILABLE
+		);
+	}
+
+	/**
+	 * Generates control buttons for all connected rooms.
+	 * <p>Each button allows rebooting all devices in the corresponding room group.</p>
+	 *
+	 * @return a list of {@link AdvancedControllableProperty} for connected room reboot actions
+	 */
+	private List<AdvancedControllableProperty> getRoomControllers() {
+		if (CollectionUtils.isEmpty(this.rooms)) {
+			this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, Constant.ROOM_GROUP));
+			return new ArrayList<>();
+		}
+		List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
+		List<Room> connectedRooms = this.rooms.stream().filter(r -> r.getStatus().equals("Connected")).collect(Collectors.toList());
+		for (int i = 0; i < connectedRooms.size(); i++) {
+			String groupName = String.format(Constant.GROUP_FORMAT, Constant.ROOM_GROUP, i + 1);
+			String propertyName = String.format(Constant.PROPERTY_FORMAT, groupName, RoomProperty.REBOOT_ALL_DEVICES.getName());
+
+			controllableProperties.add(this.generateControllableButton(propertyName, "Reboot", "Rebooting", 0));
+		}
+
+		return controllableProperties;
+	}
+
+	/**
+	 * Generates control dropdowns for aggregated device settings.
+	 * <p>Each dropdown corresponds to a configurable setting with its available options.</p>
+	 *
+	 * @param isConnectedDevice whether the device is currently connected
+	 * @param settings the {@link Settings} object containing current setting selections
+	 * @return a list of {@link AdvancedControllableProperty} for device settings, or empty if disconnected or invalid
+	 */
+	private List<AdvancedControllableProperty> getASettingsControllers(Boolean isConnectedDevice, Settings settings) {
+		if (Boolean.FALSE.equals(isConnectedDevice) || settings.isNull()) {
+			return new ArrayList<>();
+		}
+		List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
+		Arrays.stream(SettingProperty.values()).forEach(property -> {
+			String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, property.getName());
+			String[] options = BaseProperty.getNames(property.getType());
+			String currentValue = Util.mapToASettingsProperty(property, settings);
+			AdvancedControllableProperty controllableProperty = this.generateControllableDropdown(propertyName, options, options, currentValue);
+
+			controllableProperties.add(controllableProperty);
+		});
+
+		return controllableProperties;
+	}
+
+	/**
+	 * Generates a map of property names and their corresponding values.
+	 * <p>
+	 * Each property name can be optionally prefixed with a group name using a predefined format.
+	 * The values are derived using the provided mapping function, with {@link Constant#NOT_AVAILABLE} as a fallback for null results.
+	 * </p>
+	 *
+	 * @param <T> the enum type that extends {@link BaseProperty}
+	 * @param properties the array of enum constants to be processed; if null, an empty map is returned
+	 * @param groupName optional group name used to prefix each property's name; can be null
+	 * @param mapper a function that maps each property to its corresponding string value;
+	 * if null or if the result is null, {@link Constant#NOT_AVAILABLE} is used as the value
+	 * @return a map where keys are (optionally grouped) property names and values are mapped strings or {@link Constant#NOT_AVAILABLE}
+	 */
+	private <T extends Enum<T> & BaseProperty> Map<String, String> generateProperties(T[] properties, String groupName, Function<T, String> mapper) {
+		if (properties == null || mapper == null) {
+			return Collections.emptyMap();
+		}
+		return Arrays.stream(properties).collect(Collectors.toMap(
+				property -> Objects.isNull(groupName) ? property.getName() : String.format(Constant.PROPERTY_FORMAT, groupName, property.getName()),
+				property -> Optional.ofNullable(mapper.apply(property)).orElse(Constant.NOT_AVAILABLE)
+		));
+	}
+
+	/**
+	 * Generates an {@link AdvancedControllableProperty} of type Button with the specified name, labels, and grace period.
+	 *
+	 * @param buttonName the name of the button control property
+	 * @param label the label to display on the button
+	 * @param labelPressed the label to display when the button is pressed
+	 * @param gracePeriod the time in milliseconds before the button can be pressed again
+	 * @return an {@link AdvancedControllableProperty} configured as a button control
+	 */
+	private AdvancedControllableProperty generateControllableButton(String buttonName, String label, String labelPressed, long gracePeriod) {
+		AdvancedControllableProperty.Button button = new Button();
+		button.setLabel(label);
+		button.setLabelPressed(labelPressed);
+		button.setGracePeriod(gracePeriod);
+
+		return new AdvancedControllableProperty(buttonName, new Date(), button, Constant.NOT_AVAILABLE);
+	}
+
+	/**
+	 * Generates an {@link AdvancedControllableProperty} of type Dropdown with the specified name, labels, options, and value.
+	 *
+	 * @param dropdownName the name of the dropdown control property
+	 * @param labels the display labels for each dropdown option
+	 * @param options the actual option values associated with each label
+	 * @param value the initial selected value of the dropdown
+	 * @return an {@link AdvancedControllableProperty} configured as a dropdown control
+	 */
+	private AdvancedControllableProperty generateControllableDropdown(String dropdownName, String[] labels, String[] options, Object value) {
+		AdvancedControllableProperty.DropDown dropdown = new AdvancedControllableProperty.DropDown();
+		dropdown.setLabels(labels);
+		dropdown.setOptions(options);
+
+		return new AdvancedControllableProperty(dropdownName, new Date(), dropdown, value);
+	}
+
+	/**
+	 * Fetches data from a given endpoint and maps the response to the specified class type.
+	 * <p>Handles exceptions such as login failure, unreachable resource, or unknown errors.</p>
+	 *
+	 * @param endpoint the API endpoint to fetch data from
+	 * @param responseClass the target class to map the response to
+	 * @param <T> the type of the expected response
+	 * @return the mapped response object, or null if response is empty
+	 * @throws FailedLoginException if authentication fails
+	 */
+	private <T> T fetchData(String endpoint, Class<T> responseClass) throws FailedLoginException {
+		String responseClassName = responseClass.getSimpleName();
+		try {
+			T response = super.doGet(endpoint, responseClass);
+			if (Objects.isNull(response)) {
+				this.logger.warn(String.format(Constant.FETCHED_DATA_NULL_WARNING, endpoint, responseClassName));
+			}
+			this.requestStateHandler.resolveError(responseClassName);
+
+			return response;
+		} catch (FailedLoginException e) {
+			throw new FailedLoginException(Constant.LOGIN_FAILED);
+		} catch (ResourceNotReachableException e) {
+			throw new ResourceNotReachableException(e.getMessage(), e);
+		} catch (Exception e) {
+			this.requestStateHandler.pushError(responseClassName, e);
+			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint, responseClassName), e);
+			throw new ResourceNotReachableException(Constant.SET_UP_DATA_FAILED);
+		}
+	}
+
+	/**
+	 * Fetches data from a given endpoint and extracts a specific field to map using a {@link TypeReference}.
+	 * <p>Useful for mapping generic or complex types such as collections or nested structures.</p>
+	 *
+	 * @param endpoint the API endpoint to fetch data from
+	 * @param indicatedField the field name in the JSON response to extract and map
+	 * @param typeReference the {@link TypeReference} defining the target type
+	 * @param <T> the type of the expected response
+	 * @return the mapped response object, or null if response is empty
+	 * @throws FailedLoginException if authentication fails
+	 */
+	public <T> T fetchData(String endpoint, String indicatedField, TypeReference<T> typeReference) throws FailedLoginException {
+		String typeReferenceName = typeReference.getType().getTypeName();
+		try {
+			String response = super.doGet(endpoint);
+			T mappedResponse = this.objectMapper.readValue(this.objectMapper.readTree(response).get(indicatedField).toString(), typeReference);
+			if (Objects.isNull(response)) {
+				this.logger.warn(String.format(Constant.FETCHED_DATA_NULL_WARNING, endpoint, typeReferenceName));
+			}
+			this.requestStateHandler.resolveError(typeReferenceName);
+
+			return mappedResponse;
+		} catch (FailedLoginException e) {
+			throw new FailedLoginException(Constant.LOGIN_FAILED);
+		} catch (ResourceNotReachableException e) {
+			throw new ResourceNotReachableException(e.getMessage(), e);
+		} catch (Exception e) {
+			this.requestStateHandler.pushError(typeReferenceName, e);
+			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint, typeReferenceName), e);
+			throw new ResourceNotReachableException(Constant.SET_UP_DATA_FAILED);
+		}
+	}
+
+	/**
+	 * Performs a control operation (POST or PATCH) on the given URI with the provided request body.
+	 * <p>Logs and throws meaningful exceptions for failure scenarios.</p>
+	 *
+	 * @param httpMethod the HTTP method to use (POST or PATCH)
+	 * @param endpoint the target URI to send the request to
+	 * @param requestBody the request payload to be sent
+	 * @throws FailedLoginException if authentication fails
+	 */
+	private void performControlOperation(HttpMethod httpMethod, String endpoint, Object requestBody) throws FailedLoginException {
+		try {
+			switch (httpMethod) {
+				case POST:
+					this.doPost(endpoint, requestBody, Object.class);
+					break;
+				case PATCH:
+					this.doPatch(endpoint, requestBody, Object.class);
+					break;
+				default:
+					break;
+			}
+		} catch (FailedLoginException e) {
+			throw new FailedLoginException(Constant.LOGIN_FAILED);
+		} catch (ResourceNotReachableException e) {
+			throw new ResourceNotReachableException(e.getMessage());
+		} catch (Exception e) {
+			this.logger.error(String.format(Constant.CONTROL_OPERATION_FAILED, endpoint), e);
+			throw new NotImplementedException(Constant.ACTION_PERFORM_FAILED, e);
+		}
+	}
+}
