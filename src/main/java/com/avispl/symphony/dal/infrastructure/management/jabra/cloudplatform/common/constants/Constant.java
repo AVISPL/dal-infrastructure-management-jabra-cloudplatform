@@ -4,6 +4,9 @@
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants;
 
 
+import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
+import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty.Button;
+
 /**
  * Utility class that defines constant values used across the application.
  *
@@ -34,6 +37,7 @@ public class Constant {
 
 	//	Values
 	public static final String NOT_AVAILABLE = "N/A";
+	public static final AdvancedControllableProperty DUMMY_CONTROLLER = new AdvancedControllableProperty(null, null, new Button(), null);
 
 	//	Info messages
 	public static final String INITIAL_INTERNAL_INFO = "Initialing internal state of instance: ";

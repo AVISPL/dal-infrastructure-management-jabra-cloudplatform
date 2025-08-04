@@ -86,7 +86,7 @@ public class JabraCloudDataLoader implements Runnable {
 			}
 			if (this.flag) {
 				this.nextCollectionTime = System.currentTimeMillis() + POLLING_CYCLE_INTERVAL;
-				this.communicator.lastMonitoringCycleDuration = System.currentTimeMillis() - startCycle;
+				this.communicator.setLastMonitoringCycleDuration(System.currentTimeMillis() - startCycle);
 				this.flag = false;
 			}
 		}

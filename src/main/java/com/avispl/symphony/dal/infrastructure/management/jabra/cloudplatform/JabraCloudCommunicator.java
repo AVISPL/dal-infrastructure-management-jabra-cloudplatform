@@ -29,10 +29,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import javax.security.auth.login.FailedLoginException;
 import org.apache.commons.collections.CollectionUtils;
 
-import com.avispl.symphony.api.common.error.NotImplementedException;
 import com.avispl.symphony.api.dal.control.Controller;
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
-import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty.Button;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
@@ -91,7 +89,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	/**
 	 * Duration (in milliseconds) of the last monitoring cycle.
 	 */
-	public Long lastMonitoringCycleDuration;
+	private Long lastMonitoringCycleDuration;
 	/**
 	 * Executes asynchronous tasks for data loader.
 	 */
@@ -112,10 +110,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * Handles request status tracking and error detection.
 	 */
 	private RequestStateHandler requestStateHandler;
-	/**
-	 * Dummy control property used when no controllable properties are available from devices.
-	 */
-	private AdvancedControllableProperty dummyControllableProperty;
 	/**
 	 * List of devices fetched from the {@link ApiConstant#GET_DEVICES_ENDPOINT}.
 	 */
@@ -143,11 +137,19 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.localExtendedStatistics = new ExtendedStatistics();
 		this.localAggregatedDevices = new ArrayList<>();
 		this.requestStateHandler = new RequestStateHandler();
-		this.dummyControllableProperty = new AdvancedControllableProperty(null, null, new Button(), null);
 		this.devices = new ArrayList<>();
 		this.devicesRooms = new ArrayList<>();
 		this.devicesSettings = new HashMap<>();
 		this.rooms = new ArrayList<>();
+	}
+
+	/**
+	 * Sets {@link #lastMonitoringCycleDuration} value
+	 *
+	 * @param lastMonitoringCycleDuration new value of {@link #lastMonitoringCycleDuration}
+	 */
+	public void setLastMonitoringCycleDuration(Long lastMonitoringCycleDuration) {
+		this.lastMonitoringCycleDuration = lastMonitoringCycleDuration;
 	}
 
 	@Override
@@ -199,7 +201,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			properties.putAll(this.getASettingsProperties(device.getConnected(), deviceSettings));
 
 			List<AdvancedControllableProperty> controllableProperties = this.getASettingsControllers(device.getConnected(), deviceSettings);
-			Optional.of(controllableProperties).filter(List::isEmpty).ifPresent(l -> l.add(this.dummyControllableProperty));
+			Optional.of(controllableProperties).filter(List::isEmpty).ifPresent(l -> l.add(Constant.DUMMY_CONTROLLER));
 
 			aggregatedDevice.setProperties(properties);
 			aggregatedDevice.setControllableProperties(controllableProperties);
@@ -226,6 +228,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			String[] groupParts = controllerParts[0].split(Constant.UNDERSCORE);
 			String groupName = groupParts[0];
 			String propertyName = controllerParts[1];
+
 			if (groupName.equals(Constant.AGGREGATED_SETTINGS_GROUP)) {
 				SettingProperty settingProperty = BaseProperty.getByName(SettingProperty.class, propertyName);
 				String settingValue = BaseProperty.getByName(settingProperty.getType(), controllableProperty.getValue().toString()).getValue();
@@ -245,13 +248,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.logger.warn(Constant.CONTROLLABLE_PROPS_EMPTY_WARNING);
 			return;
 		}
-		controllableProperties.forEach(controllableProperty -> {
-			try {
-				this.controlProperty(controllableProperty);
-			} catch (Exception e) {
-				this.logger.error(Constant.CONTROL_PROPERTY_FAILED + controllableProperty.getProperty(), e);
-			}
-		});
+		for (ControllableProperty controllableProperty : controllableProperties) {
+			this.controlProperty(controllableProperty);
+		}
 	}
 
 	@Override
@@ -279,7 +278,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.devicesSettings = null;
 		this.devicesRooms = null;
 		this.devices = null;
-		this.dummyControllableProperty = null;
 		this.requestStateHandler = null;
 		this.localAggregatedDevices = null;
 		this.localExtendedStatistics = null;
@@ -431,7 +429,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			return Collections.emptyMap();
 		}
 		Map<String, String> properties = new HashMap<>();
-		properties.putAll(this.generateProperties(AGeneralProperty.values(), null, property -> Util.mapToAGeneralProperty(property, device)));
+		properties.putAll(this.generateProperties(AGeneralProperty.values(), null, property -> Util.mapToAggregatedGeneralProperty(property, device)));
 		if (Util.isSupportedDevice(device)) {
 			properties.putAll(this.generateProperties(OptionalGeneralProperty.values(), null, property -> Util.mapToOptionalGeneralProperty(property, device)));
 		}
@@ -452,7 +450,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		return this.generateProperties(
 				ComputerProperty.values(),
 				Constant.AGGREGATED_COMPUTER_GROUP,
-				property -> Util.mapToAComputerProperty(property, computer)
+				property -> Util.mapToComputerProperty(property, computer)
 		);
 	}
 
@@ -469,7 +467,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		return this.generateProperties(
 				ClientProperty.values(),
 				Constant.AGGREGATED_CLIENT_GROUP,
-				property -> Util.mapToAClientProperty(property, client)
+				property -> Util.mapToClientProperty(property, client)
 		);
 	}
 
@@ -489,7 +487,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 				SettingProperty.values(),
 				Constant.AGGREGATED_SETTINGS_GROUP,
 				property -> Boolean.FALSE.equals(isConnectedDevice)
-						? Util.mapToASettingsProperty(property, settings)
+						? Util.mapToSettingsProperty(property, settings)
 						: Constant.NOT_AVAILABLE
 		);
 	}
@@ -510,7 +508,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		Arrays.stream(SettingProperty.values()).forEach(property -> {
 			String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, property.getName());
 			String[] options = BaseProperty.getNames(property.getType());
-			String currentValue = Util.mapToASettingsProperty(property, settings);
+			String currentValue = Util.mapToSettingsProperty(property, settings);
 			AdvancedControllableProperty controllableProperty = this.generateControllableDropdown(propertyName, options, options, currentValue);
 
 			controllableProperties.add(controllableProperty);
@@ -648,10 +646,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		} catch (FailedLoginException e) {
 			throw new FailedLoginException(Constant.LOGIN_FAILED);
 		} catch (ResourceNotReachableException e) {
-			throw new ResourceNotReachableException(e.getMessage());
+			throw new ResourceNotReachableException(e.getMessage(), e);
 		} catch (Exception e) {
 			this.logger.error(String.format(Constant.CONTROL_OPERATION_FAILED, endpoint), e);
-			throw new NotImplementedException(Constant.ACTION_PERFORM_FAILED, e);
+			throw new ResourceNotReachableException(Constant.ACTION_PERFORM_FAILED, e);
 		}
 	}
 }

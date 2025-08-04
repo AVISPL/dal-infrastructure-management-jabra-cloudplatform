@@ -85,7 +85,8 @@ public class Util {
 	 */
 	public static String mapToRoomProperty(RoomProperty property, Room room) {
 		if (room == null) {
-			return Constant.NOT_AVAILABLE;
+			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "room"));
+			return null;
 		}
 
 		switch (property) {
@@ -105,7 +106,7 @@ public class Util {
 				return mapToValue(room.getStatus());
 			default:
 				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToRoomProperty", property));
-				return Constant.NOT_AVAILABLE;
+				return null;
 		}
 	}
 
@@ -118,7 +119,7 @@ public class Util {
 	 * @param device   the {@link Device} object containing property values
 	 * @return the string representation of the property, or {@code null} if unavailable
 	 */
-	public static String mapToAGeneralProperty(AGeneralProperty property, Device device) {
+	public static String mapToAggregatedGeneralProperty(AGeneralProperty property, Device device) {
 		if (device == null) {
 			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
 			return null;
@@ -175,6 +176,7 @@ public class Util {
 				String roomLocation = device.getRoomLocation();
 				return StringUtils.isNotNullOrEmpty(roomLocation) ? roomLocation : Constant.NOT_AVAILABLE;
 			default:
+
 				return Constant.NOT_AVAILABLE;
 		}
 	}
@@ -187,8 +189,9 @@ public class Util {
 	 * @param computer the {@link Computer} object containing property values
 	 * @return the string representation of the property, or {@code null} if unavailable
 	 */
-	public static String mapToAComputerProperty(ComputerProperty property, Computer computer) {
+	public static String mapToComputerProperty(ComputerProperty property, Computer computer) {
 		if (computer == null) {
+			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "computer"));
 			return null;
 		}
 
@@ -204,7 +207,7 @@ public class Util {
 			case USERNAME:
 				return mapToValue(computer.getUserName());
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToAComputerProperty", property));
+				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToComputerProperty", property));
 				return null;
 		}
 	}
@@ -217,7 +220,7 @@ public class Util {
 	 * @param client   the {@link JabraClient} object containing property values
 	 * @return the string representation of the property, or {@code null} if unavailable
 	 */
-	public static String mapToAClientProperty(ClientProperty property, JabraClient client) {
+	public static String mapToClientProperty(ClientProperty property, JabraClient client) {
 		if (client == null) {
 			return null;
 		}
@@ -230,7 +233,7 @@ public class Util {
 			case VERSION:
 				return mapToValue(client.getClientVersion());
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToAClientProperty", property));
+				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToClientProperty", property));
 				return null;
 		}
 	}
@@ -244,7 +247,7 @@ public class Util {
 	 * @param settings the {@link Settings} object containing selected setting details
 	 * @return the display name of the selected setting, or {@code null} if unavailable
 	 */
-	public static String mapToASettingsProperty(SettingProperty property, Settings settings) {
+	public static String mapToSettingsProperty(SettingProperty property, Settings settings) {
 		if (settings == null) {
 			return null;
 		}
@@ -265,7 +268,7 @@ public class Util {
 			case VIDEO_STITCHING:
 				return getSelectedSetting(settings.getVideoStitching(), property.getType());
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToASettingsValue", property));
+				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToSettingsValue", property));
 				return null;
 		}
 	}
