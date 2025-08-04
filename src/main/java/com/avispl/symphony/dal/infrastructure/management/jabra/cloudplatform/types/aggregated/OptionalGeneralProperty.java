@@ -1,28 +1,25 @@
 /*
  * Copyright (c) 2025 AVI-SPL, Inc. All Rights Reserved.
  */
-package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator;
+package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated;
 
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bases.BaseProperty;
 
 /**
- * Represents room properties of an aggregator device.
+ * Represents optional general properties of an aggregated device.
  *
  * @author Kevin / Symphony Dev Team
  * @since 1.0.0
  */
-public enum RoomProperty implements BaseProperty {
-	DATE_AND_TIME_CREATED("DateAndTimeCreated"),
-	GROUP_ID("GroupID"),
-	LOCATION("Location"),
-	ID("ID"),
-	NAME("Name"),
-	TYPE("Type"),
-	STATUS("Status");
+public enum OptionalGeneralProperty implements BaseProperty {
+	DEVICE_CONNECTION_STATUS("DeviceConnectionStatus"),
+	ROOM_NAME("RoomName"),
+	ROOM_TYPE("RoomType"),
+	ROOM_LOCATION("RoomLocation");
 
 	private final String name;
 
-	RoomProperty(String name) {
+	OptionalGeneralProperty(String name) {
 		this.name = name;
 	}
 

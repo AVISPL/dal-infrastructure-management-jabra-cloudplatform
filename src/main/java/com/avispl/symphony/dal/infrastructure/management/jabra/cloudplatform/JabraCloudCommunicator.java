@@ -45,6 +45,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bas
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.RequestStateHandler;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant.ControlMethod;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Computer;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
@@ -56,6 +57,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ClientProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ComputerProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.OptionalGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.GeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.RoomProperty;
@@ -166,12 +168,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			statistics.putAll(this.getGeneralProperties());
 			statistics.putAll(this.getRoomProperties());
 
-			List<AdvancedControllableProperty> controllableProperties = this.getRoomControllers();
-			Optional.of(controllableProperties).filter(List::isEmpty).ifPresent(l -> l.add(this.dummyControllableProperty));
-
 			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 			extendedStatistics.setStatistics(statistics);
-			extendedStatistics.setControllableProperties(controllableProperties);
 			this.localExtendedStatistics = extendedStatistics;
 		} finally {
 			this.reentrantLock.unlock();
@@ -228,26 +226,13 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			String[] groupParts = controllerParts[0].split(Constant.UNDERSCORE);
 			String groupName = groupParts[0];
 			String propertyName = controllerParts[1];
-			switch (groupName) {
-				case Constant.ROOM_GROUP:
-					if (propertyName.equals(RoomProperty.REBOOT_ALL_DEVICES.getName())) {
-						int groupIndex = Integer.parseInt(groupParts[groupParts.length - 1]) - 1;
-						String roomID = this.rooms.get(groupIndex).getId();
-						String url = ApiConstant.POST_REBOOT_DEVICES_ENDPOINT.replace(ApiConstant.ROOM_ID_PARAM, roomID);
+			if (groupName.equals(Constant.AGGREGATED_SETTINGS_GROUP)) {
+				SettingProperty settingProperty = BaseProperty.getByName(SettingProperty.class, propertyName);
+				String settingValue = BaseProperty.getByName(settingProperty.getType(), controllableProperty.getValue().toString()).getValue();
+				String url = ApiConstant.PATCH_DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, controllableProperty.getDeviceId());
+				SettingsRequest settingsRequest = new SettingsRequest(settingProperty.getApiField(), settingValue);
 
-						this.performControlOperation(HttpMethod.POST, url, null);
-					}
-					break;
-				case Constant.AGGREGATED_SETTINGS_GROUP:
-					SettingProperty settingProperty = BaseProperty.getByName(SettingProperty.class, propertyName);
-					String settingValue = BaseProperty.getByName(settingProperty.getType(), controllableProperty.getValue().toString()).getValue();
-					String url = ApiConstant.PATCH_DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, controllableProperty.getDeviceId());
-					SettingsRequest settingsRequest = new SettingsRequest(settingProperty.getApiField(), settingValue);
-
-					this.performControlOperation(HttpMethod.PATCH, url, settingsRequest);
-					break;
-				default:
-					break;
+				this.performControlOperation(ControlMethod.PATCH, url, settingsRequest);
 			}
 		} finally {
 			this.reentrantLock.unlock();
@@ -344,6 +329,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * @throws FailedLoginException if authentication fails during API calls
 	 */
 	private void setupData() throws FailedLoginException {
+		this.requestStateHandler.clearRequests();
 		this.devicesRooms.clear();
 		this.rooms.clear();
 		this.devices = this.fetchData(ApiConstant.GET_DEVICES_ENDPOINT, ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE);
@@ -353,12 +339,28 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		List<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toList());
 		for (String groupId : groupIDs) {
 			String url = ApiConstant.GET_ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
-			Room room = Optional.ofNullable(this.fetchData(url, Room.class)).orElse(new Room());
+			Room room = this.fetchData(url, Room.class);
 
-			this.rooms.add(room);
-			this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
+			if (room != null) {
+				this.rooms.add(room);
+				this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
+			}
 		}
-		this.requestStateHandler.verifyAPIState();
+		this.devices.forEach(device -> {
+			Room room = this.rooms.stream().filter(r -> r.getGroupId().equals(device.getGroupId())).findFirst().orElse(null);
+			if (room == null) {
+				return;
+			}
+
+			String connectionStatus = Optional.ofNullable(room.getDevices()).orElse(Collections.emptyList()).stream()
+					.filter(deviceRoom -> deviceRoom.getId().equals(device.getId())).findFirst()
+					.map(DeviceOverview::getDeviceConnectionStatus).orElse(null);
+			device.setDeviceConnectionStatus(connectionStatus);
+			device.setRoomName(room.getName());
+			device.setRoomType(room.getType());
+			device.setRoomLocation(room.getLocationName());
+		});
+		this.requestStateHandler.verifyRequestState();
 	}
 
 	/**
@@ -377,14 +379,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 		this.dataLoader.nextCollectionTime = System.currentTimeMillis();
 		this.dataLoader.updateValidRetrieveStatisticsTimestamp();
-		this.devices.replaceAll(device -> {
-			String deviceConnectionStatus = this.devicesRooms.stream()
-					.filter(deviceRoom -> deviceRoom.getId().equals(device.getId())).findFirst()
-					.map(DeviceOverview::getDeviceConnectionStatus).orElse(null);
-
-			device.setDeviceConnectionStatus(deviceConnectionStatus);
-			return device;
-		});
 	}
 
 	/**
@@ -433,13 +427,16 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Map<String, String> getAGeneralProperties(Device device) {
 		if (device == null) {
+			this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
 			return Collections.emptyMap();
 		}
-		return this.generateProperties(
-				AGeneralProperty.values(),
-				null,
-				property -> Util.mapToAGeneralProperty(property, device)
-		);
+		Map<String, String> properties = new HashMap<>();
+		properties.putAll(this.generateProperties(AGeneralProperty.values(), null, property -> Util.mapToAGeneralProperty(property, device)));
+		if (Util.isSupportedDevice(device)) {
+			properties.putAll(this.generateProperties(OptionalGeneralProperty.values(), null, property -> Util.mapToOptionalGeneralProperty(property, device)));
+		}
+
+		return properties;
 	}
 
 	/**
@@ -498,29 +495,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	/**
-	 * Generates control buttons for all connected rooms.
-	 * <p>Each button allows rebooting all devices in the corresponding room group.</p>
-	 *
-	 * @return a list of {@link AdvancedControllableProperty} for connected room reboot actions
-	 */
-	private List<AdvancedControllableProperty> getRoomControllers() {
-		if (CollectionUtils.isEmpty(this.rooms)) {
-			this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, Constant.ROOM_GROUP));
-			return new ArrayList<>();
-		}
-		List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
-		List<Room> connectedRooms = this.rooms.stream().filter(r -> r.getStatus().equals("Connected")).collect(Collectors.toList());
-		for (int i = 0; i < connectedRooms.size(); i++) {
-			String groupName = String.format(Constant.GROUP_FORMAT, Constant.ROOM_GROUP, i + 1);
-			String propertyName = String.format(Constant.PROPERTY_FORMAT, groupName, RoomProperty.REBOOT_ALL_DEVICES.getName());
-
-			controllableProperties.add(this.generateControllableButton(propertyName, "Reboot", "Rebooting", 0));
-		}
-
-		return controllableProperties;
-	}
-
-	/**
 	 * Generates control dropdowns for aggregated device settings.
 	 * <p>Each dropdown corresponds to a configurable setting with its available options.</p>
 	 *
@@ -570,24 +544,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	/**
-	 * Generates an {@link AdvancedControllableProperty} of type Button with the specified name, labels, and grace period.
-	 *
-	 * @param buttonName the name of the button control property
-	 * @param label the label to display on the button
-	 * @param labelPressed the label to display when the button is pressed
-	 * @param gracePeriod the time in milliseconds before the button can be pressed again
-	 * @return an {@link AdvancedControllableProperty} configured as a button control
-	 */
-	private AdvancedControllableProperty generateControllableButton(String buttonName, String label, String labelPressed, long gracePeriod) {
-		AdvancedControllableProperty.Button button = new Button();
-		button.setLabel(label);
-		button.setLabelPressed(labelPressed);
-		button.setGracePeriod(gracePeriod);
-
-		return new AdvancedControllableProperty(buttonName, new Date(), button, Constant.NOT_AVAILABLE);
-	}
-
-	/**
 	 * Generates an {@link AdvancedControllableProperty} of type Dropdown with the specified name, labels, options, and value.
 	 *
 	 * @param dropdownName the name of the dropdown control property
@@ -606,7 +562,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 
 	/**
 	 * Fetches data from a given endpoint and maps the response to the specified class type.
-	 * <p>Handles exceptions such as login failure, unreachable resource, or unknown errors.</p>
 	 *
 	 * @param endpoint the API endpoint to fetch data from
 	 * @param responseClass the target class to map the response to
@@ -617,11 +572,12 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private <T> T fetchData(String endpoint, Class<T> responseClass) throws FailedLoginException {
 		String responseClassName = responseClass.getSimpleName();
 		try {
+			this.requestStateHandler.pushRequest(endpoint);
 			T response = super.doGet(endpoint, responseClass);
 			if (Objects.isNull(response)) {
 				this.logger.warn(String.format(Constant.FETCHED_DATA_NULL_WARNING, endpoint, responseClassName));
 			}
-			this.requestStateHandler.resolveError(responseClassName);
+			this.requestStateHandler.resolveError(endpoint);
 
 			return response;
 		} catch (FailedLoginException e) {
@@ -629,15 +585,14 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		} catch (ResourceNotReachableException e) {
 			throw new ResourceNotReachableException(e.getMessage(), e);
 		} catch (Exception e) {
-			this.requestStateHandler.pushError(responseClassName, e);
+			this.requestStateHandler.pushError(endpoint, e);
 			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint, responseClassName), e);
-			throw new ResourceNotReachableException(Constant.SET_UP_DATA_FAILED);
+			return null;
 		}
 	}
 
 	/**
 	 * Fetches data from a given endpoint and extracts a specific field to map using a {@link TypeReference}.
-	 * <p>Useful for mapping generic or complex types such as collections or nested structures.</p>
 	 *
 	 * @param endpoint the API endpoint to fetch data from
 	 * @param indicatedField the field name in the JSON response to extract and map
@@ -649,12 +604,13 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	public <T> T fetchData(String endpoint, String indicatedField, TypeReference<T> typeReference) throws FailedLoginException {
 		String typeReferenceName = typeReference.getType().getTypeName();
 		try {
+			this.requestStateHandler.pushRequest(endpoint);
 			String response = super.doGet(endpoint);
 			T mappedResponse = this.objectMapper.readValue(this.objectMapper.readTree(response).get(indicatedField).toString(), typeReference);
 			if (Objects.isNull(response)) {
 				this.logger.warn(String.format(Constant.FETCHED_DATA_NULL_WARNING, endpoint, typeReferenceName));
 			}
-			this.requestStateHandler.resolveError(typeReferenceName);
+			this.requestStateHandler.resolveError(endpoint);
 
 			return mappedResponse;
 		} catch (FailedLoginException e) {
@@ -662,22 +618,22 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		} catch (ResourceNotReachableException e) {
 			throw new ResourceNotReachableException(e.getMessage(), e);
 		} catch (Exception e) {
-			this.requestStateHandler.pushError(typeReferenceName, e);
+			this.requestStateHandler.pushError(endpoint, e);
 			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint, typeReferenceName), e);
-			throw new ResourceNotReachableException(Constant.SET_UP_DATA_FAILED);
+			return null;
 		}
 	}
 
 	/**
-	 * Performs a control operation (POST or PATCH) on the given URI with the provided request body.
+	 * Performs a control operation on the given URI with the provided request body.
 	 * <p>Logs and throws meaningful exceptions for failure scenarios.</p>
 	 *
-	 * @param httpMethod the HTTP method to use (POST or PATCH)
+	 * @param httpMethod the HTTP method to use
 	 * @param endpoint the target URI to send the request to
 	 * @param requestBody the request payload to be sent
 	 * @throws FailedLoginException if authentication fails
 	 */
-	private void performControlOperation(HttpMethod httpMethod, String endpoint, Object requestBody) throws FailedLoginException {
+	private void performControlOperation(ControlMethod httpMethod, String endpoint, Object requestBody) throws FailedLoginException {
 		try {
 			switch (httpMethod) {
 				case POST:

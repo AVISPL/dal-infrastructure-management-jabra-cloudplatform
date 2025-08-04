@@ -43,6 +43,7 @@ public class Constant {
 	public static final String CONTROLLABLE_PROPS_EMPTY_WARNING = "ControllableProperties list is null or empty, skipping control operation";
 	public static final String FETCHED_DATA_NULL_WARNING = "Fetched data is null. Endpoint: %s, ResponseClass: %s";
 	public static final String LIST_EMPTY_WARNING = "The list of %s is empty, returning empty collection";
+	public static final String OBJECT_EMPTY_WARNING = "The %s is null, returning empty collection";
 	public static final String UNSUPPORTED_MAP_PROPERTY_WARNING = "Unsupported %s with property %s";
 
 	//	Fail messages

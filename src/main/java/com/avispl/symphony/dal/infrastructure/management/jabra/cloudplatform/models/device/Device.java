@@ -30,6 +30,9 @@ public class Device {
 	private String deviceConnectionStatus;
 	private Computer computer;
 	private JabraClient jabraClient;
+	private String roomName;
+	private String roomType;
+	private String roomLocation;
 
 	public Device() {
 		//	Default constructor required for JSON deserialization.
@@ -303,5 +306,59 @@ public class Device {
 	 */
 	public void setJabraClient(JabraClient jabraClient) {
 		this.jabraClient = jabraClient;
+	}
+
+	/**
+	 * Retrieves {@link #roomName}
+	 *
+	 * @return value of {@link #roomName}
+	 */
+	public String getRoomName() {
+		return roomName;
+	}
+
+	/**
+	 * Sets {@link #roomName} value
+	 *
+	 * @param roomName new value of {@link #roomName}
+	 */
+	public void setRoomName(String roomName) {
+		this.roomName = roomName;
+	}
+
+	/**
+	 * Retrieves {@link #roomType}
+	 *
+	 * @return value of {@link #roomType}
+	 */
+	public String getRoomType() {
+		return roomType;
+	}
+
+	/**
+	 * Sets {@link #roomType} value
+	 *
+	 * @param roomType new value of {@link #roomType}
+	 */
+	public void setRoomType(String roomType) {
+		this.roomType = roomType;
+	}
+
+	/**
+	 * Retrieves {@link #roomLocation}
+	 *
+	 * @return value of {@link #roomLocation}
+	 */
+	public String getRoomLocation() {
+		return roomLocation;
+	}
+
+	/**
+	 * Sets {@link #roomLocation} value
+	 *
+	 * @param roomLocation new value of {@link #roomLocation}
+	 */
+	public void setRoomLocation(String roomLocation) {
+		this.roomLocation = roomLocation;
 	}
 }

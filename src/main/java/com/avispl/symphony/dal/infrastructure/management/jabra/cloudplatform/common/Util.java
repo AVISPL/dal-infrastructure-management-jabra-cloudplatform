@@ -3,10 +3,10 @@
  */
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common;
 
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 
@@ -24,6 +24,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ClientProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ComputerProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.OptionalGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.GeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.RoomProperty;
@@ -89,9 +90,7 @@ public class Util {
 
 		switch (property) {
 			case DATE_AND_TIME_CREATED:
-				return mapToReadableDateTime(room.getCreatedAt(), room.getTimeZoneId());
-			case REBOOT_ALL_DEVICES:
-				return room.getStatus().equals("Connected") ? Constant.NOT_AVAILABLE : "Reboot";
+				return mapToReadableDateTime(room.getCreatedAt());
 			case GROUP_ID:
 				return mapToValue(room.getGroupId());
 			case LOCATION:
@@ -110,6 +109,7 @@ public class Util {
 		}
 	}
 
+
 	/**
 	 * Maps a general property for the Aggregated device.
 	 * <p>Handles standard device fields. Returns {@code null} if the device is null or the property is unsupported.</p>
@@ -120,12 +120,13 @@ public class Util {
 	 */
 	public static String mapToAGeneralProperty(AGeneralProperty property, Device device) {
 		if (device == null) {
+			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
 			return null;
 		}
 
 		switch (property) {
 			case ADDED_AT:
-				return mapToReadableDateTime(device.getAddedAt(), null);
+				return mapToReadableDateTime(device.getAddedAt());
 			case FIRMWARE_UPDATE_IN_PROGRESS:
 				return mapToValue(device.getFirmwareUpdateInProgress());
 			case FIRMWARE_VERSION:
@@ -133,18 +134,48 @@ public class Util {
 			case GROUP_ID:
 				return mapToValue(device.getGroupId());
 			case LAST_SEEN_AT:
-				return mapToReadableDateTime(device.getLastSeenAt(), null);
+				return mapToReadableDateTime(device.getLastSeenAt());
 			case PRODUCT_ID:
 				return mapToValue(device.getProductId());
 			case PRODUCT_NAME:
 				return mapToValue(device.getProductName());
 			case VARIANT_TYPE:
 				return mapToValue(device.getVariantType());
-			case DEVICE_CONNECTION_STATUS:
-				return mapToValue(device.getDeviceConnectionStatus());
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToAGeneralProperty", property));
 				return null;
+		}
+	}
+
+	/**
+	 * Maps an optional general property for the supported aggregated {@link Device}.
+	 * <p>Handles optional fields such as room data.
+	 * Returns {@link Constant#NOT_AVAILABLE} if the device is {@code null} or the property is not supported.</p>
+	 *
+	 * @param property the {@link OptionalGeneralProperty} to map
+	 * @param device the {@link Device} instance containing the property values
+	 * @return a string representation of the optional property, or {@link Constant#NOT_AVAILABLE} if unavailable
+	 */
+	public static String mapToOptionalGeneralProperty(OptionalGeneralProperty property, Device device) {
+		if (device == null) {
+			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			return Constant.NOT_AVAILABLE;
+		}
+
+		switch (property) {
+			case DEVICE_CONNECTION_STATUS:
+				String connectionStatus = device.getDeviceConnectionStatus();
+				return StringUtils.isNotNullOrEmpty(connectionStatus) ? connectionStatus : Constant.NOT_AVAILABLE;
+			case ROOM_NAME:
+				String roomName = device.getRoomName();
+				return StringUtils.isNotNullOrEmpty(roomName) ? roomName : Constant.NOT_AVAILABLE;
+			case ROOM_TYPE:
+				String roomType = device.getRoomType();
+				return StringUtils.isNotNullOrEmpty(roomType) ? roomType : Constant.NOT_AVAILABLE;
+			case ROOM_LOCATION:
+				String roomLocation = device.getRoomLocation();
+				return StringUtils.isNotNullOrEmpty(roomLocation) ? roomLocation : Constant.NOT_AVAILABLE;
+			default:
+				return Constant.NOT_AVAILABLE;
 		}
 	}
 
@@ -250,6 +281,18 @@ public class Util {
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
+	}
+
+	/**
+	 * Checks whether the given {@link Device} is supported based on its product ID.
+	 * <p>This method compares the device's product ID with the predefined supported product ID</p>
+	 *
+	 * @param device the {@link Device} to check
+	 * @return {@code true} if the device's product ID matches the supported ID, {@code false} otherwise
+	 */
+	public static boolean isSupportedDevice(Device device) {
+		int supportedProductID = 12306;
+		return Objects.equals(device.getProductId(), supportedProductID);
 	}
 
 	/**
@@ -375,13 +418,14 @@ public class Util {
 	 * Converts an ISO datetime string to a readable format with the given time zone.
 	 *
 	 * @param datetime   ISO-8601 datetime string
-	 * @param timeZoneId optional time zone ID
 	 * @return formatted datetime string, or null if conversion fails
 	 */
-	private static String mapToReadableDateTime(String datetime, String timeZoneId) {
+	private static String mapToReadableDateTime(String datetime) {
 		try {
-			ZoneId zoneId = ZoneId.of(Optional.ofNullable(timeZoneId).orElse(ZoneId.systemDefault().getId()));
-			ZonedDateTime zonedDateTime = ZonedDateTime.parse(datetime).withZoneSameInstant(zoneId);
+			if (StringUtils.isNullOrEmpty(datetime)) {
+				return null;
+			}
+			ZonedDateTime zonedDateTime = ZonedDateTime.parse(datetime);
 			DateTimeFormatter formatter = DateTimeFormatter.ofPattern(Constant.READABLE_DATE_TIME_FORMAT, Locale.ENGLISH);
 
 			return zonedDateTime.format(formatter);

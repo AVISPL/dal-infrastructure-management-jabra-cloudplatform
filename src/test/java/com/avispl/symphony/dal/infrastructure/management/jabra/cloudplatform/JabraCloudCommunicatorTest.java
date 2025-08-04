@@ -20,7 +20,6 @@ import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.RoomProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.AutomaticZoomMode;
 
 
@@ -81,16 +80,6 @@ class JabraCloudCommunicatorTest {
 	}
 
 	@Test
-	void testResetDevicesControl() throws Exception {
-		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
-		ControllableProperty controllableProperty = new ControllableProperty();
-		controllableProperty.setProperty("Room_01#" + RoomProperty.REBOOT_ALL_DEVICES.getName());
-		controllableProperty.setValue(Constant.NOT_AVAILABLE);
-
-		this.jabraCloudCommunicator.controlProperty(controllableProperty);
-	}
-
-	@Test
 	void testSettingToDeviceControl() throws Exception {
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		ControllableProperty controllableProperty = new ControllableProperty();
@@ -105,6 +94,9 @@ class JabraCloudCommunicatorTest {
 		Map<String, Map<String, String>> groups = new LinkedHashMap<>();
 		groups.put(Constant.GENERAL_GROUP, this.filterGroupStatistics(statistics, null));
 		groups.put(Constant.ROOM_GROUP, this.filterGroupStatistics(statistics, Constant.ROOM_GROUP));
+		groups.put(Constant.AGGREGATED_CLIENT_GROUP, this.filterGroupStatistics(statistics, Constant.AGGREGATED_CLIENT_GROUP));
+		groups.put(Constant.AGGREGATED_COMPUTER_GROUP, this.filterGroupStatistics(statistics, Constant.AGGREGATED_COMPUTER_GROUP));
+		groups.put(Constant.AGGREGATED_SETTINGS_GROUP, this.filterGroupStatistics(statistics, Constant.AGGREGATED_SETTINGS_GROUP));
 
 		for (Map<String, String> initGroup : groups.values()) {
 			for (Map.Entry<String, String> initStatistics : initGroup.entrySet()) {

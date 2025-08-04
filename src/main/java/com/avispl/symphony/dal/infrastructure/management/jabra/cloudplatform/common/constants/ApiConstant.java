@@ -21,6 +21,8 @@ public class ApiConstant {
 		// Prevent instantiation
 	}
 
+	public enum ControlMethod {POST, PATCH}
+
 	//	API variables
 	public static final String API_KEY_HEADER = "Ocp-Apim-Subscription-Key";
 	public static final String API_VERSION_HEADER = "api-version";

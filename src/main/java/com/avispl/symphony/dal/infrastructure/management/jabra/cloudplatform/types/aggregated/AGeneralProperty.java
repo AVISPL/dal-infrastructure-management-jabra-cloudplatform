@@ -19,8 +19,7 @@ public enum AGeneralProperty implements BaseProperty {
 	LAST_SEEN_AT("LastSeenAt"),
 	PRODUCT_ID("ProductID"),
 	PRODUCT_NAME("ProductName"),
-	VARIANT_TYPE("VariantType"),
-	DEVICE_CONNECTION_STATUS("DeviceConnectionStatus");
+	VARIANT_TYPE("VariantType");
 
 	private final String name;
 

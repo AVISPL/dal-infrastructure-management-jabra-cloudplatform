@@ -4,6 +4,7 @@
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.avispl.symphony.api.dal.error.ResourceNotReachableException;
@@ -14,7 +15,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.com
  * Whenever an important part of the API fails, aggregator should call {@link #pushError(String, Throwable)},
  * when the error is resolved - {@link #resolveError(String)}
  *
- * Then, {@link #verifyAPIState()} is called after the data processing, and if there are errors - the RuntimeException is thrown
+ * Then, {@link #verifyRequestState()} is called after the data processing, and if there are errors - the RuntimeException is thrown
  * with the details about the failed API sections and top error cause.
  *
  * @author Kevin/Symphony Team
@@ -25,6 +26,15 @@ public class RequestStateHandler {
 	 * Map of api sections and corresponding instances of {@link Throwable}
 	 */
 	private final Map<String, Throwable> apiErrors = new ConcurrentHashMap<>();
+	private final Set<String> sentRequests = ConcurrentHashMap.newKeySet();
+
+	public void pushRequest(String endpoint) {
+		this.sentRequests.add(endpoint);
+	}
+
+	public void clearRequests() {
+		this.sentRequests.clear();
+	}
 
 	/**
 	 * Add an error to the {@link #apiErrors}
@@ -46,12 +56,12 @@ public class RequestStateHandler {
 	}
 
 	/**
-	 * Process {@link #apiErrors} contents and throw an error if any errors remain.
+	 * Checks {@link #apiErrors} and throws an exception if all requests failed.
 	 *
-	 * @throws ResourceNotReachableException if {@link #apiErrors} is not empty
+	 * @throws ResourceNotReachableException if {@link #apiErrors} is not empty and matches sent requests
 	 */
-	public void verifyAPIState() {
-		if (this.apiErrors.isEmpty()) {
+	public void verifyRequestState() {
+		if (this.apiErrors.isEmpty() || this.apiErrors.size() != this.sentRequests.size()) {
 			return;
 		}
 
