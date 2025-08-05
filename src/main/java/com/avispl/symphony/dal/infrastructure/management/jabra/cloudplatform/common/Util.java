@@ -5,11 +5,16 @@ package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.co
 
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.Collections;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -54,7 +59,8 @@ public class Util {
 	 */
 	public static String mapToGeneralProperty(GeneralProperty property, Properties versionProperties) {
 		if (property == null) {
-			return Constant.NOT_AVAILABLE;
+			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "versionProperties"));
+			return null;
 		}
 
 		switch (property) {
@@ -110,7 +116,6 @@ public class Util {
 		}
 	}
 
-
 	/**
 	 * Maps a general property for the Aggregated device.
 	 * <p>Handles standard device fields. Returns {@code null} if the device is null or the property is unsupported.</p>
@@ -143,6 +148,7 @@ public class Util {
 			case VARIANT_TYPE:
 				return mapToValue(device.getVariantType());
 			default:
+				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToAggregatedGeneralProperty", property));
 				return null;
 		}
 	}
@@ -176,7 +182,7 @@ public class Util {
 				String roomLocation = device.getRoomLocation();
 				return StringUtils.isNotNullOrEmpty(roomLocation) ? roomLocation : Constant.NOT_AVAILABLE;
 			default:
-
+				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToOptionalGeneralProperty", property));
 				return Constant.NOT_AVAILABLE;
 		}
 	}
@@ -222,6 +228,7 @@ public class Util {
 	 */
 	public static String mapToClientProperty(ClientProperty property, JabraClient client) {
 		if (client == null) {
+			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "client"));
 			return null;
 		}
 
@@ -249,6 +256,7 @@ public class Util {
 	 */
 	public static String mapToSettingsProperty(SettingProperty property, Settings settings) {
 		if (settings == null) {
+			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "settings"));
 			return null;
 		}
 
@@ -271,6 +279,51 @@ public class Util {
 				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToSettingsValue", property));
 				return null;
 		}
+	}
+
+	/**
+	 * Converts a nested settings map into a flat map of formatted setting names and their values.
+	 * <p>
+	 * Used specifically for unsupported devices.
+	 * Determines the value based on the presence of keys: {@code isOn}, {@code selected}, or {@code value}.
+	 * </p>
+	 *
+	 * @param settings the raw settings map
+	 * @return a map of formatted setting names to their string values, or an empty map if input is null or empty
+	 */
+	public static Map<String, String> mapToSettingsProperties(Map<String, Map<String, Object>> settings) {
+		if (MapUtils.isEmpty(settings)) {
+			LOGGER.warn(String.format(Constant.LIST_EMPTY_WARNING, "settings"));
+			return Collections.emptyMap();
+		}
+
+		return settings.entrySet().stream().map(s -> {
+			String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, toTitleCase(s.getKey()));
+			Map<String, Object> settingDetail = s.getValue();
+			String value;
+			if (settingDetail.containsKey("isOn")) {
+				Object isOn = settingDetail.get("isOn");
+				if (isOn == null) {
+					value = Constant.NOT_AVAILABLE;
+				} else if (Boolean.TRUE.equals(isOn)) {
+					value = "On";
+				} else {
+					value = "Off";
+				}
+			} else if (settingDetail.containsKey("selected")) {
+				value = String.valueOf(settingDetail.get("selected"));
+			} else if (settingDetail.containsKey("value")) {
+				value = String.valueOf(settingDetail.get("value"));
+			} else {
+				value = null;
+			}
+			if (StringUtils.isNullOrEmpty(value) || value.equals("null")) {
+				value = Constant.NOT_AVAILABLE;
+			} else {
+				value = toTitleCase(value);
+			}
+			return new SimpleEntry<>(propertyName, value);
+		}).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 	}
 
 	/**
@@ -309,10 +362,13 @@ public class Util {
 	 * @param value input value to convert
 	 * @return String value or null
 	 */
-	private static String mapToValue(Object value) {
+	public static String mapToValue(Object value) {
 		if (value instanceof String) {
 			String str = (String) value;
-			return StringUtils.isNotNullOrEmpty(str) ? str : null;
+			if (str.equals("true") || str.equals("false")) {
+				return str;
+			}
+			return StringUtils.isNotNullOrEmpty(str) ? toTitleCase(str) : null;
 		}
 		if (value instanceof Boolean || value instanceof Integer) {
 			return value.toString();
@@ -448,6 +504,31 @@ public class Util {
 		if (StringUtils.isNullOrEmpty(macAddress)) {
 			return null;
 		}
+		if (macAddress.matches(Constant.MAC_ADDRESS_REGEX)) {
+			return macAddress;
+		}
 		return macAddress.replaceAll("(.{2})(?!$)", "$1:").toUpperCase();
+	}
+
+	/**
+	 * Capitalizes the first character of the input string.
+	 * <p>
+	 * If the input is {@code null}, empty, or the literal string {@code "null"}, this method returns {@code null}.
+	 * If the input is {@code "true"} or {@code "false"}, the method returns the input unchanged.
+	 * Otherwise, it returns the input string with its first character converted to uppercase.
+	 * </p>
+	 *
+	 * @param value the input string to convert
+	 * @return a string with the first character capitalized, or {@code null} if the input is invalid
+	 */
+	private static String toTitleCase(String value) {
+		if (StringUtils.isNullOrEmpty(value) || value.equals("null")) {
+			return null;
+		}
+		if (value.equals("true") || value.equals("false")) {
+			return value;
+		}
+
+		return Character.toUpperCase(value.charAt(0)) + value.substring(1);
 	}
 }

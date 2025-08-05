@@ -12,7 +12,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bas
  * @since 1.0.0
  */
 public enum SettingsRevertToDefault implements BaseSetting {
-	EN_CALL("When a video conference ends", "enCall"),
+	EN_CALL("When a video conference ends", "endCall"),
 	PC_UNPLUG("When a new computer is connected", "pcUnplug");
 
 	private final String name;

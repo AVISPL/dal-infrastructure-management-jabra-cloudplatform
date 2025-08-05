@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
@@ -51,6 +52,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.requests.SettingsRequest;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.DeviceOverview;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.Room;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.SettingDetail;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ClientProperty;
@@ -59,6 +61,8 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.typ
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.GeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.RoomProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.AutomaticZoomMode;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.DynamicComposition;
 import com.avispl.symphony.dal.util.StringUtils;
 
 /**
@@ -117,7 +121,11 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	/**
 	 * Mapping of device IDs to their corresponding settings from the {@link ApiConstant#GET_DEVICE_SETTINGS_ENDPOINT}
 	 */
-	private Map<String, Settings> devicesSettings;
+	private Map<String, Settings> supportedDevicesSettings;
+	/**
+	 * Maps unsupported device IDs to their raw settings structure from {@link ApiConstant#GET_DEVICE_SETTINGS_ENDPOINT}.
+	 */
+	private Map<String, Map<String, Map<String, Object>>> unsupportedDevicesSettings;
 	/**
 	 * List of overview devices collected from all rooms.
 	 */
@@ -139,7 +147,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.requestStateHandler = new RequestStateHandler();
 		this.devices = new ArrayList<>();
 		this.devicesRooms = new ArrayList<>();
-		this.devicesSettings = new HashMap<>();
+		this.supportedDevicesSettings = new HashMap<>();
+		this.unsupportedDevicesSettings = new HashMap<>();
 		this.rooms = new ArrayList<>();
 	}
 
@@ -182,6 +191,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	@Override
 	public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
 		if (CollectionUtils.isEmpty(this.devices)) {
+			this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, "device"));
 			return Collections.emptyList();
 		}
 		this.setupDataLoader();
@@ -189,18 +199,17 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.devices.forEach(device -> {
 			AggregatedDevice aggregatedDevice = new AggregatedDevice();
 			aggregatedDevice.setDeviceId(device.getId());
-			aggregatedDevice.setDeviceName(device.getName());
+			aggregatedDevice.setDeviceName(device.getProductName());
 			aggregatedDevice.setDeviceOnline(device.getConnected());
 			aggregatedDevice.setSerialNumber(device.getSerialNumber());
 
-			Settings deviceSettings = Optional.ofNullable(this.devicesSettings.get(device.getId())).orElse(new Settings());
 			Map<String, String> properties = new HashMap<>();
-			properties.putAll(this.getAGeneralProperties(device));
-			properties.putAll(this.getAComputerProperties(device.getComputer()));
-			properties.putAll(this.getAJabraClientProperties(device.getJabraClient()));
-			properties.putAll(this.getASettingsProperties(device.getConnected(), deviceSettings));
+			properties.putAll(this.getAggregatedGeneralProperties(device));
+			properties.putAll(this.getComputerProperties(device.getComputer()));
+			properties.putAll(this.getClientProperties(device.getJabraClient()));
+			properties.putAll(this.getSettingsProperties(device));
 
-			List<AdvancedControllableProperty> controllableProperties = this.getASettingsControllers(device.getConnected(), deviceSettings);
+			List<AdvancedControllableProperty> controllableProperties = this.getSettingsControllers(device);
 			Optional.of(controllableProperties).filter(List::isEmpty).ifPresent(l -> l.add(Constant.DUMMY_CONTROLLER));
 
 			aggregatedDevice.setProperties(properties);
@@ -275,7 +284,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.logger.info(Constant.DESTROY_INTERNAL_INFO + this);
 
 		this.rooms = null;
-		this.devicesSettings = null;
+		this.unsupportedDevicesSettings = null;
+		this.supportedDevicesSettings = null;
 		this.devicesRooms = null;
 		this.devices = null;
 		this.requestStateHandler = null;
@@ -334,15 +344,16 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		if (CollectionUtils.isEmpty(this.devices)) {
 			return;
 		}
-		List<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toList());
+		Set<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toSet());
 		for (String groupId : groupIDs) {
 			String url = ApiConstant.GET_ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
 			Room room = this.fetchData(url, Room.class);
-
-			if (room != null) {
-				this.rooms.add(room);
-				this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
+			if (room == null) {
+				continue;
 			}
+
+			this.rooms.add(room);
+			this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
 		}
 		this.devices.forEach(device -> {
 			Room room = this.rooms.stream().filter(r -> r.getGroupId().equals(device.getGroupId())).findFirst().orElse(null);
@@ -372,10 +383,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private void setupDataLoader() {
 		if (this.executorService == null) {
 			this.executorService = Executors.newFixedThreadPool(1);
-			this.dataLoader = new JabraCloudDataLoader(this, this.devices, this.devicesSettings);
+			this.dataLoader = new JabraCloudDataLoader(this, this.devices, this.supportedDevicesSettings, this.unsupportedDevicesSettings);
 			this.executorService.submit(this.dataLoader);
 		}
-		this.dataLoader.nextCollectionTime = System.currentTimeMillis();
+		this.dataLoader.setNextCollectionTime(System.currentTimeMillis());
 		this.dataLoader.updateValidRetrieveStatisticsTimestamp();
 	}
 
@@ -423,14 +434,15 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * @param device the {@link Device} to extract properties from
 	 * @return a map of property names and their corresponding values, or an empty map if device is null
 	 */
-	private Map<String, String> getAGeneralProperties(Device device) {
+	private Map<String, String> getAggregatedGeneralProperties(Device device) {
 		if (device == null) {
 			this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
 			return Collections.emptyMap();
 		}
+		boolean isDeviceInRoom = this.devicesRooms.stream().anyMatch(deviceOverview -> deviceOverview.getId().equals(device.getId()));
 		Map<String, String> properties = new HashMap<>();
 		properties.putAll(this.generateProperties(AGeneralProperty.values(), null, property -> Util.mapToAggregatedGeneralProperty(property, device)));
-		if (Util.isSupportedDevice(device)) {
+		if (isDeviceInRoom) {
 			properties.putAll(this.generateProperties(OptionalGeneralProperty.values(), null, property -> Util.mapToOptionalGeneralProperty(property, device)));
 		}
 
@@ -443,8 +455,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * @param computer the {@link Computer} to extract properties from
 	 * @return a map of property names and their corresponding values, or an empty map if computer is null
 	 */
-	private Map<String, String> getAComputerProperties(Computer computer) {
+	private Map<String, String> getComputerProperties(Computer computer) {
 		if (computer == null) {
+			this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
 			return Collections.emptyMap();
 		}
 		return this.generateProperties(
@@ -460,8 +473,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * @param client the {@link JabraClient} to extract properties from
 	 * @return a map of property names and their corresponding values, or an empty map if client is null
 	 */
-	private Map<String, String> getAJabraClientProperties(JabraClient client) {
+	private Map<String, String> getClientProperties(JabraClient client) {
 		if (client == null) {
+			this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
 			return Collections.emptyMap();
 		}
 		return this.generateProperties(
@@ -472,36 +486,61 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	/**
-	 * Retrieves a map of settings properties and their selected values.
-	 * <p>If the device is connected, values will be marked as {@link Constant#NOT_AVAILABLE}.</p>
+	 * Returns a map of setting properties and their selected values for a given device.
+	 * <p>
+	 * If the device is disconnected, actual values are returned; otherwise, values are
+	 * marked as {@link Constant#NOT_AVAILABLE}. Returns an empty map if the device is null.
+	 * </p>
 	 *
-	 * @param isConnectedDevice indicates if the device is connected
-	 * @param settings the {@link Settings} to extract properties from
-	 * @return a map of setting names and their selected values, or an empty map if settings is null
+	 * @param device the target device
+	 * @return a map of property names and selected values, or an empty map if unavailable
 	 */
-	private Map<String, String> getASettingsProperties(Boolean isConnectedDevice, Settings settings) {
-		if (settings.isNull()) {
+	private Map<String, String> getSettingsProperties(Device device) {
+		if (device == null) {
+			this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
 			return Collections.emptyMap();
 		}
-		return this.generateProperties(
-				SettingProperty.values(),
-				Constant.AGGREGATED_SETTINGS_GROUP,
-				property -> Boolean.FALSE.equals(isConnectedDevice)
-						? Util.mapToSettingsProperty(property, settings)
-						: Constant.NOT_AVAILABLE
-		);
+		if (!Util.isSupportedDevice(device)) {
+			return Util.mapToSettingsProperties(this.unsupportedDevicesSettings.get(device.getId()));
+		}
+		Settings settings = this.supportedDevicesSettings.get(device.getId());
+		if (settings == null || settings.isNull()) {
+			return Collections.emptyMap();
+		}
+		boolean isConnectedDevice = Boolean.TRUE.equals(device.getConnected());
+		String dynamicComposition = Optional.ofNullable(settings.getDynamicComposition()).orElse(new SettingDetail()).getSelected();
+		String automaticZoomMode = Optional.ofNullable(settings.getAutomaticZoomMode()).orElse(new SettingDetail()).getSelected();
+		Map<String, String> properties = new HashMap<>(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.DYNAMIC_COMPOSITION));
+		if (Objects.equals(dynamicComposition, DynamicComposition.OFF.getValue())) {
+			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.AUTOMATIC_ZOOM_MODE));
+			if (!Objects.equals(automaticZoomMode, AutomaticZoomMode.FULL_SCREEN.getValue())) {
+				properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.AUTOMATIC_ZOOM_SPEED));
+			}
+			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.SETTINGS_REVERT_TO_DEFAULT));
+			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.FIELD_OF_VIEW));
+			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.VIDEO_STITCHING));
+		}
+		properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.SAFETY_CAPACITY_NOTIFICATION));
+
+		return properties;
 	}
 
 	/**
-	 * Generates control dropdowns for aggregated device settings.
-	 * <p>Each dropdown corresponds to a configurable setting with its available options.</p>
+	 * Generates dropdown controls for supported and connected devices.
+	 * <p>
+	 * Each dropdown represents a configurable setting with its available options.
+	 * Returns an empty list if the device is null, disconnected, or unsupported.
+	 * </p>
 	 *
-	 * @param isConnectedDevice whether the device is currently connected
-	 * @param settings the {@link Settings} object containing current setting selections
-	 * @return a list of {@link AdvancedControllableProperty} for device settings, or empty if disconnected or invalid
+	 * @param device the connected supported device
+	 * @return a list of {@link AdvancedControllableProperty}, or an empty list if not applicable
 	 */
-	private List<AdvancedControllableProperty> getASettingsControllers(Boolean isConnectedDevice, Settings settings) {
-		if (Boolean.FALSE.equals(isConnectedDevice) || settings.isNull()) {
+	private List<AdvancedControllableProperty> getSettingsControllers(Device device) {
+		if (device == null || Boolean.FALSE.equals(device.getConnected()) || !Util.isSupportedDevice(device)) {
+			return new ArrayList<>();
+		}
+		Settings settings = this.supportedDevicesSettings.get(device.getId());
+		if (settings == null || settings.isNull()) {
 			return new ArrayList<>();
 		}
 		List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
@@ -539,6 +578,27 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 				property -> Objects.isNull(groupName) ? property.getName() : String.format(Constant.PROPERTY_FORMAT, groupName, property.getName()),
 				property -> Optional.ofNullable(mapper.apply(property)).orElse(Constant.NOT_AVAILABLE)
 		));
+	}
+
+	/**
+	 * Generates a settings property map for a given device setting.
+	 * <p>
+	 * The method constructs a property name using a predefined format and determines the corresponding value
+	 * based on the device's connection status. If the device is connected, a "Not Available" constant is returned.
+	 * Otherwise, it attempts to extract the value from the provided {@link Settings} object using a utility method.
+	 *
+	 * @param isConnected whether the device is currently connected
+	 * @param settings the {@link Settings} object containing the device's configuration
+	 * @param property the specific {@link SettingProperty} to extract the value for
+	 * @return a singleton map where the key is the generated property name and the value is the resolved setting value or a default fallback
+	 */
+	private Map<String, String> generateSettingsProperty(boolean isConnected, Settings settings, SettingProperty property) {
+		String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, property.getName());
+		String propertyValue = isConnected
+				? Constant.NOT_AVAILABLE
+				: Optional.ofNullable(Util.mapToSettingsProperty(property, settings)).orElse(Constant.NOT_AVAILABLE);
+
+		return Collections.singletonMap(propertyName, propertyValue);
 	}
 
 	/**

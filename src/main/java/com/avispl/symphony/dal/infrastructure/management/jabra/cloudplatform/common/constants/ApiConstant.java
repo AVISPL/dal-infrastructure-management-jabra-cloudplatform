@@ -4,6 +4,7 @@
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants;
 
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 
@@ -28,12 +29,13 @@ public class ApiConstant {
 	public static final String API_VERSION_HEADER = "api-version";
 	public static final String DEVICE_ID_PARAM = "{deviceId}";
 	public static final String GROUP_ID_PARAM = "{groupId}";
-	public static final String ROOM_ID_PARAM = "{roomId}";
 	public static final String ITEMS_FIELD = "items";
 	public static final String SETTINGS_FIELD = "settings";
 
 	//	API types
 	public static final TypeReference<Settings> SETTINGS_RES_TYPE = new TypeReference<Settings>() {
+	};
+	public static final TypeReference<Map<String, Map<String, Object>>> COMMON_SETTINGS_RES_TYPE = new TypeReference<Map<String, Map<String, Object>>>() {
 	};
 	public static final TypeReference<List<Device>> DEVICES_RES_TYPE = new TypeReference<List<Device>>() {
 	};
@@ -43,5 +45,4 @@ public class ApiConstant {
 	public static final String GET_DEVICE_SETTINGS_ENDPOINT = "assetmanagement/api/api-device/" + DEVICE_ID_PARAM + "/settings";
 	public static final String PATCH_DEVICE_SETTINGS_ENDPOINT = "assetmanagement/api/api-device/" + DEVICE_ID_PARAM + "/settings";
 	public static final String GET_ROOMS_ENDPOINT = "meetingroomassetmanagement/api/rooms/" + GROUP_ID_PARAM;
-	public static final String POST_REBOOT_DEVICES_ENDPOINT = "meetingroomassetmanagement/api/rooms/" + ROOM_ID_PARAM + "/reboot";
 }

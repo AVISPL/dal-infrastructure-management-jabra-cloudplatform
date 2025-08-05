@@ -12,7 +12,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bas
  * @since 1.0.0
  */
 public enum RoomProperty implements BaseProperty {
-	DATE_AND_TIME_CREATED("DateAndTimeCreated"),
+	DATE_AND_TIME_CREATED("DateAndTimeCreated(UTC)"),
 	GROUP_ID("GroupID"),
 	LOCATION("Location"),
 	ID("ID"),

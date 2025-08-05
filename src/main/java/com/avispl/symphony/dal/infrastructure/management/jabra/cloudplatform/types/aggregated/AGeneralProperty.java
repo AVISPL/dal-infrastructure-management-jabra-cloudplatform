@@ -12,11 +12,11 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bas
  * @since 1.0.0
  */
 public enum AGeneralProperty implements BaseProperty {
-	ADDED_AT("AddedAt"),
+	ADDED_AT("AddedAt(UTC)"),
 	FIRMWARE_UPDATE_IN_PROGRESS("FirmwareUpdateInProgress"),
 	FIRMWARE_VERSION("FirmwareVersion"),
 	GROUP_ID("GroupID"),
-	LAST_SEEN_AT("LastSeenAt"),
+	LAST_SEEN_AT("LastSeenAt(UTC)"),
 	PRODUCT_ID("ProductID"),
 	PRODUCT_NAME("ProductName"),
 	VARIANT_TYPE("VariantType");

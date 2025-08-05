@@ -20,7 +20,7 @@ import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.AutomaticZoomMode;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.SettingsRevertToDefault;
 
 
 /**
@@ -64,10 +64,10 @@ class JabraCloudCommunicatorTest {
 	void testRetrieveMultipleStatistics() throws Exception {
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		this.jabraCloudCommunicator.retrieveMultipleStatistics();
-		Util.delayExecution(20000);
+		Util.delayExecution(10000);
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		this.jabraCloudCommunicator.retrieveMultipleStatistics();
-		Util.delayExecution(20000);
+		Util.delayExecution(10000);
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		List<AggregatedDevice> aggregatedDevices = this.jabraCloudCommunicator.retrieveMultipleStatistics();
 
@@ -82,9 +82,11 @@ class JabraCloudCommunicatorTest {
 	@Test
 	void testSettingToDeviceControl() throws Exception {
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		this.jabraCloudCommunicator.retrieveMultipleStatistics();
+		Util.delayExecution(10000);
 		ControllableProperty controllableProperty = new ControllableProperty();
-		controllableProperty.setProperty("Settings#" + SettingProperty.AUTOMATIC_ZOOM_MODE.getName());
-		controllableProperty.setValue(AutomaticZoomMode.FULL_SCREEN.getName());
+		controllableProperty.setProperty("Settings#" + SettingProperty.SETTINGS_REVERT_TO_DEFAULT.getName());
+		controllableProperty.setValue(SettingsRevertToDefault.EN_CALL.getName());
 		controllableProperty.setDeviceId("DD9ECD6296804500D744A03C47526EA8B7C0A1C68");
 
 		this.jabraCloudCommunicator.controlProperty(controllableProperty);
@@ -94,8 +96,8 @@ class JabraCloudCommunicatorTest {
 		Map<String, Map<String, String>> groups = new LinkedHashMap<>();
 		groups.put(Constant.GENERAL_GROUP, this.filterGroupStatistics(statistics, null));
 		groups.put(Constant.ROOM_GROUP, this.filterGroupStatistics(statistics, Constant.ROOM_GROUP));
-		groups.put(Constant.AGGREGATED_CLIENT_GROUP, this.filterGroupStatistics(statistics, Constant.AGGREGATED_CLIENT_GROUP));
 		groups.put(Constant.AGGREGATED_COMPUTER_GROUP, this.filterGroupStatistics(statistics, Constant.AGGREGATED_COMPUTER_GROUP));
+		groups.put(Constant.AGGREGATED_CLIENT_GROUP, this.filterGroupStatistics(statistics, Constant.AGGREGATED_CLIENT_GROUP));
 		groups.put(Constant.AGGREGATED_SETTINGS_GROUP, this.filterGroupStatistics(statistics, Constant.AGGREGATED_SETTINGS_GROUP));
 
 		for (Map<String, String> initGroup : groups.values()) {

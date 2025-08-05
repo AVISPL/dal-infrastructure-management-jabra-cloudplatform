@@ -22,6 +22,7 @@ public class Constant {
 	public static final String GROUP_FORMAT = "%s_%02d";
 	public static final String PROPERTY_FORMAT = "%s#%s";
 	public static final String READABLE_DATE_TIME_FORMAT = "MMM d, yyyy, h:mm a";
+	public static final String MAC_ADDRESS_REGEX = "^([0-9A-Fa-f]{2}([-:])){5}([0-9A-Fa-f]{2})$";
 
 	//	Special characters
 	public static final String COMMA = ",";
@@ -55,7 +56,6 @@ public class Constant {
 	public static final String FETCH_DATA_FAILED = "Exception while fetching data. Endpoint: %s, ResponseClass: %s";
 	public static final String CONTROL_PROPERTY_FAILED = "Failed to control property: ";
 	public static final String LOGIN_FAILED = "Failed to login, please check the credentials";
-	public static final String SET_UP_DATA_FAILED = "Failed to set up data for statistics";
 	public static final String ACTION_PERFORM_FAILED = "Failed to perform control operation";
 	public static final String MAP_TO_UPTIME_FAILED = "Failed to mapToUptime with uptime: ";
 	public static final String MAP_TO_UPTIME_MIN_FAILED = "Failed to mapToUptimeMin with uptime: ";

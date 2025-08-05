@@ -27,8 +27,6 @@ public class Room {
 	private String status;
 	@JsonProperty("deviceGroupId")
 	private String groupId;
-	@JsonProperty("ianaTimeZoneId")
-	private String timeZoneId;
 
 	public Room() {
 		//	Default constructor required for JSON deserialization.
@@ -194,23 +192,5 @@ public class Room {
 	 */
 	public void setGroupId(String groupId) {
 		this.groupId = groupId;
-	}
-
-	/**
-	 * Retrieves {@link #timeZoneId}
-	 *
-	 * @return value of {@link #timeZoneId}
-	 */
-	public String getTimeZoneId() {
-		return timeZoneId;
-	}
-
-	/**
-	 * Sets {@link #timeZoneId} value
-	 *
-	 * @param timeZoneId new value of {@link #timeZoneId}
-	 */
-	public void setTimeZoneId(String timeZoneId) {
-		this.timeZoneId = timeZoneId;
 	}
 }
