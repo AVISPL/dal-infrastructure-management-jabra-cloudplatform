@@ -76,12 +76,16 @@ public class JabraCloudDataLoader implements Runnable {
 			long startCycle = System.currentTimeMillis();
 			Util.delayExecution(500);
 			if (!this.inProgress) {
-				this.logger.debug("Main data collection thread is not in progress, breaking.");
+				if (this.logger.isDebugEnabled()) {
+					this.logger.debug("Main data collection thread is not in progress, breaking.");
+				}
 				break;
 			}
 			this.updateAggregatorStatus();
 			if (this.devicePaused) {
-				this.logger.debug("The device communicator is paused, data collector is not active.");
+				if (this.logger.isDebugEnabled()) {
+					this.logger.debug("The device communicator is paused, data collector is not active.");
+				}
 				continue;
 			}
 
@@ -92,7 +96,9 @@ public class JabraCloudDataLoader implements Runnable {
 			}
 
 			if (!this.inProgress) {
-				this.logger.debug("Main data collection thread is not in progress, breaking.");
+				if (this.logger.isDebugEnabled()) {
+					this.logger.debug("Main data collection thread is not in progress, breaking.");
+				}
 				break;
 			}
 			while (this.nextCollectionTime > System.currentTimeMillis()) {

@@ -26,7 +26,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.Room;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.SettingDetail;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AGeneralProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AggregatedGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ClientProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ComputerProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.OptionalGeneralProperty;
@@ -59,7 +59,9 @@ public class Util {
 	 */
 	public static String mapToGeneralProperty(GeneralProperty property, Properties versionProperties) {
 		if (property == null) {
-			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "versionProperties"));
+			if (LOGGER.isWarnEnabled()) {
+				LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "versionProperties"));
+			}
 			return null;
 		}
 
@@ -75,7 +77,9 @@ public class Util {
 			case LAST_MONITORING_CYCLE_DURATION:
 				return mapToMonitoringCycleDuration(versionProperties.getProperty(property.getProperty()));
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToGeneralProperty", property));
+				if (LOGGER.isWarnEnabled()) {
+					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToGeneralProperty", property));
+				}
 				return null;
 		}
 	}
@@ -91,7 +95,9 @@ public class Util {
 	 */
 	public static String mapToRoomProperty(RoomProperty property, Room room) {
 		if (room == null) {
-			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "room"));
+			if (LOGGER.isWarnEnabled()) {
+				LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "room"));
+			}
 			return null;
 		}
 
@@ -111,7 +117,9 @@ public class Util {
 			case STATUS:
 				return mapToValue(room.getStatus());
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToRoomProperty", property));
+				if (LOGGER.isWarnEnabled()) {
+					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToRoomProperty", property));
+				}
 				return null;
 		}
 	}
@@ -120,13 +128,15 @@ public class Util {
 	 * Maps a general property for the Aggregated device.
 	 * <p>Handles standard device fields. Returns {@code null} if the device is null or the property is unsupported.</p>
 	 *
-	 * @param property the {@link AGeneralProperty} to map
+	 * @param property the {@link AggregatedGeneralProperty} to map
 	 * @param device   the {@link Device} object containing property values
 	 * @return the string representation of the property, or {@code null} if unavailable
 	 */
-	public static String mapToAggregatedGeneralProperty(AGeneralProperty property, Device device) {
+	public static String mapToAggregatedGeneralProperty(AggregatedGeneralProperty property, Device device) {
 		if (device == null) {
-			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			if (LOGGER.isWarnEnabled()) {
+				LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			}
 			return null;
 		}
 
@@ -148,7 +158,9 @@ public class Util {
 			case VARIANT_TYPE:
 				return mapToValue(device.getVariantType());
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToAggregatedGeneralProperty", property));
+				if (LOGGER.isWarnEnabled()) {
+					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToAggregatedGeneralProperty", property));
+				}
 				return null;
 		}
 	}
@@ -164,7 +176,9 @@ public class Util {
 	 */
 	public static String mapToOptionalGeneralProperty(OptionalGeneralProperty property, Device device) {
 		if (device == null) {
-			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			if (LOGGER.isWarnEnabled()) {
+				LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			}
 			return Constant.NOT_AVAILABLE;
 		}
 
@@ -182,7 +196,9 @@ public class Util {
 				String roomLocation = device.getRoomLocation();
 				return StringUtils.isNotNullOrEmpty(roomLocation) ? roomLocation : Constant.NOT_AVAILABLE;
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToOptionalGeneralProperty", property));
+				if (LOGGER.isWarnEnabled()) {
+					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToOptionalGeneralProperty", property));
+				}
 				return Constant.NOT_AVAILABLE;
 		}
 	}
@@ -197,7 +213,9 @@ public class Util {
 	 */
 	public static String mapToComputerProperty(ComputerProperty property, Computer computer) {
 		if (computer == null) {
-			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "computer"));
+			if (LOGGER.isWarnEnabled()) {
+				LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "computer"));
+			}
 			return null;
 		}
 
@@ -213,7 +231,9 @@ public class Util {
 			case USERNAME:
 				return mapToValue(computer.getUserName());
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToComputerProperty", property));
+				if (LOGGER.isWarnEnabled()) {
+					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToComputerProperty", property));
+				}
 				return null;
 		}
 	}
@@ -228,7 +248,9 @@ public class Util {
 	 */
 	public static String mapToClientProperty(ClientProperty property, JabraClient client) {
 		if (client == null) {
-			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "client"));
+			if (LOGGER.isWarnEnabled()) {
+				LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "client"));
+			}
 			return null;
 		}
 
@@ -240,7 +262,9 @@ public class Util {
 			case VERSION:
 				return mapToValue(client.getClientVersion());
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToClientProperty", property));
+				if (LOGGER.isWarnEnabled()) {
+					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToClientProperty", property));
+				}
 				return null;
 		}
 	}
@@ -256,7 +280,9 @@ public class Util {
 	 */
 	public static String mapToSettingsProperty(SettingProperty property, Settings settings) {
 		if (settings == null) {
-			LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "settings"));
+			if (LOGGER.isWarnEnabled()) {
+				LOGGER.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "settings"));
+			}
 			return null;
 		}
 
@@ -276,7 +302,9 @@ public class Util {
 			case VIDEO_STITCHING:
 				return getSelectedSetting(settings.getVideoStitching(), property.getType());
 			default:
-				LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToSettingsValue", property));
+				if (LOGGER.isWarnEnabled()) {
+					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToSettingsValue", property));
+				}
 				return null;
 		}
 	}
@@ -293,7 +321,9 @@ public class Util {
 	 */
 	public static Map<String, String> mapToSettingsProperties(Map<String, Map<String, Object>> settings) {
 		if (MapUtils.isEmpty(settings)) {
-			LOGGER.warn(String.format(Constant.LIST_EMPTY_WARNING, "settings"));
+			if (LOGGER.isWarnEnabled()) {
+				LOGGER.warn(String.format(Constant.LIST_EMPTY_WARNING, "settings"));
+			}
 			return Collections.emptyMap();
 		}
 

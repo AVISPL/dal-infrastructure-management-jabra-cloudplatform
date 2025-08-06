@@ -54,7 +54,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.Room;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.SettingDetail;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AGeneralProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AggregatedGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ClientProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ComputerProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.OptionalGeneralProperty;
@@ -191,7 +191,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	@Override
 	public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
 		if (CollectionUtils.isEmpty(this.devices)) {
-			this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, "device"));
+			if (this.logger.isWarnEnabled()) {
+				this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, "device"));
+			}
 			return Collections.emptyList();
 		}
 		this.setupDataLoader();
@@ -254,7 +256,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	@Override
 	public void controlProperties(List<ControllableProperty> controllableProperties) throws Exception {
 		if (CollectionUtils.isEmpty(controllableProperties)) {
-			this.logger.warn(Constant.CONTROLLABLE_PROPS_EMPTY_WARNING);
+			if (this.logger.isWarnEnabled()) {
+				this.logger.warn(Constant.CONTROLLABLE_PROPS_EMPTY_WARNING);
+			}
 			return;
 		}
 		for (ControllableProperty controllableProperty : controllableProperties) {
@@ -413,7 +417,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Map<String, String> getRoomProperties() {
 		if (CollectionUtils.isEmpty(this.rooms)) {
-			this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, Constant.ROOM_GROUP));
+			if (this.logger.isWarnEnabled()) {
+				this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, Constant.ROOM_GROUP));
+			}
 			return Collections.emptyMap();
 		}
 		Map<String, String> properties = new HashMap<>();
@@ -436,12 +442,14 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Map<String, String> getAggregatedGeneralProperties(Device device) {
 		if (device == null) {
-			this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			if (this.logger.isWarnEnabled()) {
+				this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			}
 			return Collections.emptyMap();
 		}
 		boolean isDeviceInRoom = this.devicesRooms.stream().anyMatch(deviceOverview -> deviceOverview.getId().equals(device.getId()));
 		Map<String, String> properties = new HashMap<>();
-		properties.putAll(this.generateProperties(AGeneralProperty.values(), null, property -> Util.mapToAggregatedGeneralProperty(property, device)));
+		properties.putAll(this.generateProperties(AggregatedGeneralProperty.values(), null, property -> Util.mapToAggregatedGeneralProperty(property, device)));
 		if (isDeviceInRoom) {
 			properties.putAll(this.generateProperties(OptionalGeneralProperty.values(), null, property -> Util.mapToOptionalGeneralProperty(property, device)));
 		}
@@ -457,7 +465,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Map<String, String> getComputerProperties(Computer computer) {
 		if (computer == null) {
-			this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			if (this.logger.isWarnEnabled()) {
+				this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			}
 			return Collections.emptyMap();
 		}
 		return this.generateProperties(
@@ -475,7 +485,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Map<String, String> getClientProperties(JabraClient client) {
 		if (client == null) {
-			this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			if (this.logger.isWarnEnabled()) {
+				this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			}
 			return Collections.emptyMap();
 		}
 		return this.generateProperties(
@@ -497,7 +509,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Map<String, String> getSettingsProperties(Device device) {
 		if (device == null) {
-			this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			if (this.logger.isWarnEnabled()) {
+				this.logger.warn(String.format(Constant.OBJECT_EMPTY_WARNING, "device"));
+			}
 			return Collections.emptyMap();
 		}
 		if (!Util.isSupportedDevice(device)) {
@@ -632,14 +646,14 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		try {
 			this.requestStateHandler.pushRequest(endpoint);
 			T response = super.doGet(endpoint, responseClass);
-			if (Objects.isNull(response)) {
+			if (Objects.isNull(response) && this.logger.isWarnEnabled()) {
 				this.logger.warn(String.format(Constant.FETCHED_DATA_NULL_WARNING, endpoint, responseClassName));
 			}
 			this.requestStateHandler.resolveError(endpoint);
 
 			return response;
 		} catch (FailedLoginException e) {
-			throw new FailedLoginException(Constant.LOGIN_FAILED);
+			throw e;
 		} catch (ResourceNotReachableException e) {
 			throw new ResourceNotReachableException(e.getMessage(), e);
 		} catch (Exception e) {
@@ -665,14 +679,14 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.requestStateHandler.pushRequest(endpoint);
 			String response = super.doGet(endpoint);
 			T mappedResponse = this.objectMapper.readValue(this.objectMapper.readTree(response).get(indicatedField).toString(), typeReference);
-			if (Objects.isNull(response)) {
+			if (Objects.isNull(response) && this.logger.isWarnEnabled()) {
 				this.logger.warn(String.format(Constant.FETCHED_DATA_NULL_WARNING, endpoint, typeReferenceName));
 			}
 			this.requestStateHandler.resolveError(endpoint);
 
 			return mappedResponse;
 		} catch (FailedLoginException e) {
-			throw new FailedLoginException(Constant.LOGIN_FAILED);
+			throw e;
 		} catch (ResourceNotReachableException e) {
 			throw new ResourceNotReachableException(e.getMessage(), e);
 		} catch (Exception e) {
@@ -689,27 +703,17 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * @param httpMethod the HTTP method to use
 	 * @param endpoint the target URI to send the request to
 	 * @param requestBody the request payload to be sent
-	 * @throws FailedLoginException if authentication fails
 	 */
-	private void performControlOperation(ControlMethod httpMethod, String endpoint, Object requestBody) throws FailedLoginException {
-		try {
-			switch (httpMethod) {
-				case POST:
-					this.doPost(endpoint, requestBody, Object.class);
-					break;
-				case PATCH:
-					this.doPatch(endpoint, requestBody, Object.class);
-					break;
-				default:
-					break;
-			}
-		} catch (FailedLoginException e) {
-			throw new FailedLoginException(Constant.LOGIN_FAILED);
-		} catch (ResourceNotReachableException e) {
-			throw new ResourceNotReachableException(e.getMessage(), e);
-		} catch (Exception e) {
-			this.logger.error(String.format(Constant.CONTROL_OPERATION_FAILED, endpoint), e);
-			throw new ResourceNotReachableException(Constant.ACTION_PERFORM_FAILED, e);
+	private void performControlOperation(ControlMethod httpMethod, String endpoint, Object requestBody) throws Exception {
+		switch (httpMethod) {
+			case POST:
+				this.doPost(endpoint, requestBody, Object.class);
+				break;
+			case PATCH:
+				this.doPatch(endpoint, requestBody, Object.class);
+				break;
+			default:
+				break;
 		}
 	}
 }

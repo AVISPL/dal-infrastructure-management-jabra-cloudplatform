@@ -54,12 +54,9 @@ public class Constant {
 	//	Fail messages
 	public static final String READ_PROPERTIES_FILE_FAILED = "Failed to load properties file: ";
 	public static final String FETCH_DATA_FAILED = "Exception while fetching data. Endpoint: %s, ResponseClass: %s";
-	public static final String CONTROL_PROPERTY_FAILED = "Failed to control property: ";
 	public static final String LOGIN_FAILED = "Failed to login, please check the credentials";
-	public static final String ACTION_PERFORM_FAILED = "Failed to perform control operation";
 	public static final String MAP_TO_UPTIME_FAILED = "Failed to mapToUptime with uptime: ";
 	public static final String MAP_TO_UPTIME_MIN_FAILED = "Failed to mapToUptimeMin with uptime: ";
 	public static final String MAP_TO_READABLE_DATETIME_FAILED = "Failed to mapToUptimeMin with datetime: ";
 	public static final String REQUEST_APIS_FAILED = "Unable to process requested API sections: [%s], error reported: [%s]";
-	public static final String CONTROL_OPERATION_FAILED = "Exception occurred during control operation. Endpoint: %s";
 }

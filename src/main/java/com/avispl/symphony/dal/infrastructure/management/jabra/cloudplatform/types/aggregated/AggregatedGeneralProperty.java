@@ -11,7 +11,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bas
  * @author Kevin / Symphony Dev Team
  * @since 1.0.0
  */
-public enum AGeneralProperty implements BaseProperty {
+public enum AggregatedGeneralProperty implements BaseProperty {
 	ADDED_AT("AddedAt(UTC)"),
 	FIRMWARE_UPDATE_IN_PROGRESS("FirmwareUpdateInProgress"),
 	FIRMWARE_VERSION("FirmwareVersion"),
@@ -23,7 +23,7 @@ public enum AGeneralProperty implements BaseProperty {
 
 	private final String name;
 
-	AGeneralProperty(String name) {
+	AggregatedGeneralProperty(String name) {
 		this.name = name;
 	}
 
