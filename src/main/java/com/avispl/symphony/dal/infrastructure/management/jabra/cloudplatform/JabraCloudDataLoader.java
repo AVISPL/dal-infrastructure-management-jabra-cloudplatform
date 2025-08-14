@@ -3,6 +3,7 @@
  */
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,11 +25,8 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
  * @since 1.0.0
  */
 public class JabraCloudDataLoader implements Runnable {
-	private static final long POLLING_CYCLE_INTERVAL = 60000L;
-	/**
-	 * Timeout duration (in milliseconds) for retrieving statistics.
-	 */
-	private static final long RETRIEVE_STATISTICS_TIMEOUT = 3 * 60 * 1000L;
+	private static final long POLLING_CYCLE_INTERVAL = Duration.ofMinutes(1).toMillis();
+	private static final long RETRIEVE_STATISTICS_TIMEOUT = Duration.ofMinutes(3).toMillis();
 
 	private final Log logger = LogFactory.getLog(this.getClass());
 	private final JabraCloudCommunicator communicator;

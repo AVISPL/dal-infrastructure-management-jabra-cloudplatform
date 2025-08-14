@@ -4,11 +4,13 @@
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,6 +34,7 @@ import org.apache.commons.collections.CollectionUtils;
 
 import com.avispl.symphony.api.dal.control.Controller;
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
+import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty.Button;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
@@ -41,6 +44,7 @@ import com.avispl.symphony.api.dal.monitor.Monitorable;
 import com.avispl.symphony.api.dal.monitor.aggregator.Aggregator;
 import com.avispl.symphony.dal.communicator.RestCommunicator;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bases.BaseProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bases.BaseSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.RequestStateHandler;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
@@ -50,6 +54,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.JabraClient;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.requests.SettingsRequest;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.requests.SettingsRequest.OptionDetail;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.DeviceOverview;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.Room;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.SettingDetail;
@@ -73,6 +78,9 @@ import com.avispl.symphony.dal.util.StringUtils;
  * @since 1.0.0
  */
 public class JabraCloudCommunicator extends RestCommunicator implements Monitorable, Controller, Aggregator {
+	private static final long UPDATED_SETTINGS_CACHE_EXPIRY_TIME = Duration.ofMinutes(5).toMillis();
+	private static final long SETTING_UPDATE_TIME = Duration.ofMinutes(3).toMillis();
+
 	/**
 	 * Lock for thread-safe operations.
 	 */
@@ -134,6 +142,15 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * List of rooms retrieved from {@link ApiConstant#GET_ROOMS_ENDPOINT} based on current devices.
 	 */
 	private List<Room> rooms;
+	/**
+	 * A cache of updated settings requests for devices.
+	 * <p>
+	 * This cache stores the latest pending settings changes for devices.
+	 * Entries are applied when triggered by {@link SettingProperty#APPLY}
+	 * and removed either after being applied or when cleared by {@link SettingProperty#CANCEL}.
+	 * </p>
+	 */
+	private Set<SettingsRequest> updatedSettingsCaches;
 
 	public JabraCloudCommunicator() {
 		this.reentrantLock = new ReentrantLock();
@@ -150,6 +167,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.supportedDevicesSettings = new HashMap<>();
 		this.unsupportedDevicesSettings = new HashMap<>();
 		this.rooms = new ArrayList<>();
+		this.updatedSettingsCaches = new HashSet<>();
 	}
 
 	/**
@@ -240,13 +258,38 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			String groupName = groupParts[0];
 			String propertyName = controllerParts[1];
 
-			if (groupName.equals(Constant.AGGREGATED_SETTINGS_GROUP)) {
+			if (!groupName.equals(Constant.AGGREGATED_SETTINGS_GROUP)) {
+				this.logger.warn("Can't defined the controller: " + controllableProperty.getProperty());
+				return;
+			}
+			if (SettingProperty.isSupportedProperty(propertyName)) {
 				SettingProperty settingProperty = BaseProperty.getByName(SettingProperty.class, propertyName);
 				String settingValue = BaseProperty.getByName(settingProperty.getType(), controllableProperty.getValue().toString()).getValue();
-				String url = ApiConstant.PATCH_DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, controllableProperty.getDeviceId());
-				SettingsRequest settingsRequest = new SettingsRequest(settingProperty.getApiField(), settingValue);
+				Optional<SettingsRequest> settingsCache = this.updatedSettingsCaches.stream()
+						.filter(c -> c.getDeviceId().equals(controllableProperty.getDeviceId())).findFirst();
+				if (settingsCache.isPresent()) {
+					settingsCache.get().getSettings().put(settingProperty.getApiField(), new OptionDetail(settingValue));
+				} else {
+					SettingsRequest settingsRequest = new SettingsRequest(
+							controllableProperty.getDeviceId(),
+							System.currentTimeMillis() + UPDATED_SETTINGS_CACHE_EXPIRY_TIME,
+							Collections.singletonMap(settingProperty.getApiField(), new OptionDetail(settingValue))
+					);
 
-				this.performControlOperation(ControlMethod.PATCH, url, settingsRequest);
+					this.updatedSettingsCaches.add(settingsRequest);
+				}
+			} else if (SettingProperty.APPLY.getName().equals(propertyName)) {
+				String url = ApiConstant.PATCH_DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, controllableProperty.getDeviceId());
+				for (SettingsRequest settingsRequest : this.updatedSettingsCaches) {
+					if (settingsRequest.getDeviceId().equals(controllableProperty.getDeviceId())) {
+						this.performControlOperation(ControlMethod.PATCH, url, settingsRequest.getRequest());
+						this.disconnect();
+						this.updatedSettingsCaches.remove(settingsRequest);
+						break;
+					}
+				}
+			} else if (SettingProperty.CANCEL.getName().equals(propertyName)) {
+				this.updatedSettingsCaches.removeIf(cache -> cache.getDeviceId().equals(controllableProperty.getDeviceId()));
 			}
 		} finally {
 			this.reentrantLock.unlock();
@@ -287,6 +330,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	protected void internalDestroy() {
 		this.logger.info(Constant.DESTROY_INTERNAL_INFO + this);
 
+		this.updatedSettingsCaches = null;
 		this.rooms = null;
 		this.unsupportedDevicesSettings = null;
 		this.supportedDevicesSettings = null;
@@ -392,6 +436,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 		this.dataLoader.setNextCollectionTime(System.currentTimeMillis());
 		this.dataLoader.updateValidRetrieveStatisticsTimestamp();
+		this.updatedSettingsCaches.removeIf(settingsCaches -> settingsCaches.getExpiryTime() <= System.currentTimeMillis());
 	}
 
 	/**
@@ -521,10 +566,16 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		if (settings == null || settings.isNull()) {
 			return Collections.emptyMap();
 		}
+		Map<String, OptionDetail> updatedSettingsCache = this.getUpdatedSettingsCacheByDeviceId(device.getId());
 		boolean isConnectedDevice = Boolean.TRUE.equals(device.getConnected());
-		String dynamicComposition = Optional.ofNullable(settings.getDynamicComposition()).orElse(new SettingDetail()).getSelected();
-		String automaticZoomMode = Optional.ofNullable(settings.getAutomaticZoomMode()).orElse(new SettingDetail()).getSelected();
+		String dynamicComposition = Optional.ofNullable(updatedSettingsCache.get(SettingProperty.DYNAMIC_COMPOSITION.getApiField()))
+				.map(OptionDetail::getSelected)
+				.orElse(Optional.ofNullable(settings.getDynamicComposition()).orElse(new SettingDetail()).getSelected());
+		String automaticZoomMode = Optional.ofNullable(updatedSettingsCache.get(SettingProperty.AUTOMATIC_ZOOM_MODE.getApiField()))
+				.map(OptionDetail::getSelected)
+				.orElse(Optional.ofNullable(settings.getAutomaticZoomMode()).orElse(new SettingDetail()).getSelected());
 		Map<String, String> properties = new HashMap<>(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.DYNAMIC_COMPOSITION));
+
 		if (Objects.equals(dynamicComposition, DynamicComposition.OFF.getValue())) {
 			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.AUTOMATIC_ZOOM_MODE));
 			if (!Objects.equals(automaticZoomMode, AutomaticZoomMode.FULL_SCREEN.getValue())) {
@@ -535,19 +586,39 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.VIDEO_STITCHING));
 		}
 		properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.SAFETY_CAPACITY_NOTIFICATION));
+		if (!updatedSettingsCache.isEmpty()) {
+			properties.putAll(this.generateSettingsProperty(isConnectedDevice, device.getId(), SettingProperty.APPLY));
+			properties.putAll(this.generateSettingsProperty(isConnectedDevice, device.getId(), SettingProperty.CANCEL));
+		}
 
 		return properties;
 	}
 
 	/**
-	 * Generates dropdown controls for supported and connected devices.
+	 * Generates dropdown and action button controls for a supported and connected device.
 	 * <p>
-	 * Each dropdown represents a configurable setting with its available options.
-	 * Returns an empty list if the device is null, disconnected, or unsupported.
+	 * For each supported {@link SettingProperty}, a dropdown control is created
+	 * with the available options and the current selected value (from the {@link this#updatedSettingsCaches} if available,
+	 * otherwise from the device settings).
+	 * </p>
+	 * <p>
+	 * If there are cached settings for the device, additional "Apply" and "Cancel" buttons
+	 * are added to allow applying or discarding pending changes.
+	 * </p>
+	 * <p>
+	 * Returns an empty list if the device is:
+	 * <ul>
+	 *   <li>{@code null}</li>
+	 *   <li>Disconnected</li>
+	 *   <li>Not supported by {@link Util#isSupportedDevice(Device)}</li>
+	 *   <li>Has no settings available</li>
+	 * </ul>
 	 * </p>
 	 *
-	 * @param device the connected supported device
-	 * @return a list of {@link AdvancedControllableProperty}, or an empty list if not applicable
+	 * @param device the connected and supported device for which settings controls should be generated
+	 * @return a list of {@link AdvancedControllableProperty} containing dropdowns for each setting,
+	 *         and optionally "Apply"/"Cancel" buttons if there are cached changes;
+	 *         an empty list if no controls are applicable
 	 */
 	private List<AdvancedControllableProperty> getSettingsControllers(Device device) {
 		if (device == null || Boolean.FALSE.equals(device.getConnected()) || !Util.isSupportedDevice(device)) {
@@ -557,15 +628,34 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		if (settings == null || settings.isNull()) {
 			return new ArrayList<>();
 		}
+		Map<String, OptionDetail> updatedSettingsCache = this.getUpdatedSettingsCacheByDeviceId(device.getId());
 		List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
-		Arrays.stream(SettingProperty.values()).forEach(property -> {
+		SettingProperty.getSupportedProperties().forEach(property -> {
 			String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, property.getName());
 			String[] options = BaseProperty.getNames(property.getType());
-			String currentValue = Util.mapToSettingsProperty(property, settings);
+			OptionDetail settingDetailCache = updatedSettingsCache.get(property.getApiField());
+			String currentValue;
+			if (settingDetailCache == null) {
+				currentValue = Util.mapToSettingsProperty(property, settings);
+			} else {
+				SettingProperty settingProperty = SettingProperty.getByApiField(property.getApiField());
+				BaseSetting settingType = BaseSetting.getByValue(settingProperty.getType(), settingDetailCache.getSelected());
+				currentValue = settingType.getName();
+			}
 			AdvancedControllableProperty controllableProperty = this.generateControllableDropdown(propertyName, options, options, currentValue);
 
 			controllableProperties.add(controllableProperty);
 		});
+		if (!updatedSettingsCache.isEmpty()) {
+			controllableProperties.add(this.generateControllableButton(
+					String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.APPLY.getName()),
+					SettingProperty.APPLY.getName(), "Changing", SETTING_UPDATE_TIME
+			));
+			controllableProperties.add(this.generateControllableButton(
+					String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.CANCEL.getName()),
+					SettingProperty.CANCEL.getName(), "Canceling", 0L
+			));
+		}
 
 		return controllableProperties;
 	}
@@ -595,10 +685,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	/**
-	 * Generates a settings property map for a given device setting.
+	 * Generates a supported settings property ({@link SettingProperty#getSupportedProperties()}) map for a given device setting.
 	 * <p>
 	 * The method constructs a property name using a predefined format and determines the corresponding value
-	 * based on the device's connection status. If the device is connected, a "Not Available" constant is returned.
+	 * based on the device's connection status. If the device is connected, a {@link Constant#NOT_AVAILABLE} is returned.
 	 * Otherwise, it attempts to extract the value from the provided {@link Settings} object using a utility method.
 	 *
 	 * @param isConnected whether the device is currently connected
@@ -611,6 +701,30 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		String propertyValue = isConnected
 				? Constant.NOT_AVAILABLE
 				: Optional.ofNullable(Util.mapToSettingsProperty(property, settings)).orElse(Constant.NOT_AVAILABLE);
+
+		return Collections.singletonMap(propertyName, propertyValue);
+	}
+
+	/**
+	 * Generates a settings controllable property map for a given device ID.
+	 * <p>
+	 * The method constructs a property name using a predefined format and determines the corresponding value
+	 * based on the device's connection status and whether an updated settings cache exists for the device.
+	 * If the device is connected and has a pending settings cache, {@link Constant#NOT_AVAILABLE} is returned.
+	 * Otherwise, it attempts to extract the value using a utility method with a new {@link Settings} instance.
+	 * </p>
+	 *
+	 * @param isConnected whether the device is currently connected
+	 * @param deviceId the unique identifier of the device
+	 * @param property the specific {@link SettingProperty} to extract the value for
+	 * @return a singleton map where the key is the generated property name and the value is the resolved setting value or a default fallback
+	 */
+	private Map<String, String> generateSettingsProperty(boolean isConnected, String deviceId, SettingProperty property) {
+		boolean hasUpdatedSettingsCache = this.updatedSettingsCaches.stream().anyMatch(cache -> cache.getDeviceId().equals(deviceId));
+		String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, property.getName());
+		String propertyValue = isConnected && hasUpdatedSettingsCache
+				? Constant.NOT_AVAILABLE
+				: Optional.ofNullable(Util.mapToSettingsProperty(property, new Settings())).orElse(Constant.NOT_AVAILABLE);
 
 		return Collections.singletonMap(propertyName, propertyValue);
 	}
@@ -630,6 +744,37 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		dropdown.setOptions(options);
 
 		return new AdvancedControllableProperty(dropdownName, new Date(), dropdown, value);
+	}
+
+	/**
+	 * Generates an {@link AdvancedControllableProperty} of type Button with the specified name, labels, and grace period.
+	 *
+	 * @param buttonName the name of the button control property
+	 * @param label the label to display on the button
+	 * @param labelPressed the label to display when the button is pressed
+	 * @param gracePeriod the time in milliseconds before the button can be pressed again
+	 * @return an {@link AdvancedControllableProperty} configured as a button control
+	 */
+	private AdvancedControllableProperty generateControllableButton(String buttonName, String label, String labelPressed, long gracePeriod) {
+		AdvancedControllableProperty.Button button = new Button();
+		button.setLabel(label);
+		button.setLabelPressed(labelPressed);
+		button.setGracePeriod(gracePeriod);
+
+		return new AdvancedControllableProperty(buttonName, new Date(), button, Constant.NOT_AVAILABLE);
+	}
+
+	/**
+	 * Retrieves the updated settings cache for a specific device.
+	 *
+	 * @param deviceId the unique identifier of the device
+	 * @return a map of setting API field names to their {@link OptionDetail} values,
+	 * or an empty map if the device has no cached settings
+	 */
+	private Map<String, OptionDetail> getUpdatedSettingsCacheByDeviceId(String deviceId) {
+		return this.updatedSettingsCaches.stream()
+				.filter(settingsCache -> settingsCache.getDeviceId().equals(deviceId)).findFirst()
+				.map(SettingsRequest::getSettings).orElse(Collections.emptyMap());
 	}
 
 	/**

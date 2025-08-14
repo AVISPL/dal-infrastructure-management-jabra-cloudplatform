@@ -88,9 +88,7 @@
         <artifactId>maven-assembly-plugin</artifactId>
         <executions>
           <execution>
-            <phase>/*
- * Copyright (c) 2025 AVI-SPL, Inc. All Rights Reserved.
- */</phase>
+            <phase>package</phase>
             <goals>
               <goal>single</goal>
             </goals>

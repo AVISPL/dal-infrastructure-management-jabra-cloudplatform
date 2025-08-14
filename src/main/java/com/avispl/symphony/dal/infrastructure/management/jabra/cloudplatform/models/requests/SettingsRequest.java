@@ -4,7 +4,10 @@
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.requests;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
+
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
 
 /**
  * Request object representing the settings to be applied to a device. Used to send settings changes via the API.
@@ -13,10 +16,14 @@ import java.util.Map;
  * @since 1.0.0
  */
 public class SettingsRequest {
+	private String deviceId;
+	private long expiryTime;
 	private Map<String, OptionDetail> settings;
 
-	public SettingsRequest(String settingField, String selectedValue) {
-		this.settings = Collections.singletonMap(settingField, new OptionDetail(selectedValue));
+	public SettingsRequest(String deviceId, long expiryTime, Map<String, OptionDetail> settings) {
+		this.deviceId = deviceId;
+		this.expiryTime = expiryTime;
+		this.settings = new HashMap<>(settings);
 	}
 
 	/**
@@ -69,6 +76,42 @@ public class SettingsRequest {
 	}
 
 	/**
+	 * Retrieves {@link #deviceId}
+	 *
+	 * @return value of {@link #deviceId}
+	 */
+	public String getDeviceId() {
+		return deviceId;
+	}
+
+	/**
+	 * Sets {@link #deviceId} value
+	 *
+	 * @param deviceId new value of {@link #deviceId}
+	 */
+	public void setDeviceId(String deviceId) {
+		this.deviceId = deviceId;
+	}
+
+	/**
+	 * Retrieves {@link #expiryTime}
+	 *
+	 * @return value of {@link #expiryTime}
+	 */
+	public long getExpiryTime() {
+		return expiryTime;
+	}
+
+	/**
+	 * Sets {@link #expiryTime} value
+	 *
+	 * @param expiryTime new value of {@link #expiryTime}
+	 */
+	public void setExpiryTime(long expiryTime) {
+		this.expiryTime = expiryTime;
+	}
+
+	/**
 	 * Retrieves {@link #settings}
 	 *
 	 * @return value of {@link #settings}
@@ -83,6 +126,15 @@ public class SettingsRequest {
 	 * @param settings new value of {@link #settings}
 	 */
 	public void setSettings(Map<String, OptionDetail> settings) {
-		this.settings = settings;
+		this.settings = new HashMap<>(settings);
+	}
+
+	/**
+	 * Retrieves the request body for {@link ApiConstant#PATCH_DEVICE_SETTINGS_ENDPOINT}
+	 *
+	 * @return the request body(map) of {@link ApiConstant#PATCH_DEVICE_SETTINGS_ENDPOINT}
+	 */
+	public Map<String, Map<String, OptionDetail>> getRequest() {
+		return Collections.singletonMap(ApiConstant.SETTINGS_FIELD, this.settings);
 	}
 }

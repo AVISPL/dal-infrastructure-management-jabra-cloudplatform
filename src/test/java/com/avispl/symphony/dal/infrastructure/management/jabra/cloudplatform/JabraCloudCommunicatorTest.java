@@ -3,6 +3,8 @@
  */
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +22,7 @@ import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.SafetyCapacityNotification;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.SettingsRevertToDefault;
 
 
@@ -80,16 +83,46 @@ class JabraCloudCommunicatorTest {
 	}
 
 	@Test
-	void testSettingToDeviceControl() throws Exception {
-		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+	void testApplySettingsToDeviceControl() throws Exception {
+		//	Set up the statistics
+		this.jabraCloudCommunicator.getMultipleStatistics();
 		this.jabraCloudCommunicator.retrieveMultipleStatistics();
 		Util.delayExecution(10000);
-		ControllableProperty controllableProperty = new ControllableProperty();
-		controllableProperty.setProperty("Settings#" + SettingProperty.SETTINGS_REVERT_TO_DEFAULT.getName());
-		controllableProperty.setValue(SettingsRevertToDefault.EN_CALL.getName());
-		controllableProperty.setDeviceId("DD9ECD6296804500D744A03C47526EA8B7C0A1C68");
+		String deviceId = "DD9ECD6296804500D744A03C47526EA8B7C0A1C68";
 
-		this.jabraCloudCommunicator.controlProperty(controllableProperty);
+		//	Testing the changes settings
+		ControllableProperty settingProperty1 = new ControllableProperty();
+		settingProperty1.setProperty(String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.SETTINGS_REVERT_TO_DEFAULT.getName()));
+		settingProperty1.setValue(SettingsRevertToDefault.PC_UNPLUG.getName());
+		settingProperty1.setDeviceId(deviceId);
+		this.jabraCloudCommunicator.controlProperty(settingProperty1);
+		ControllableProperty settingProperty2 = new ControllableProperty();
+		settingProperty2.setProperty(String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.SAFETY_CAPACITY_NOTIFICATION.getName()));
+		settingProperty2.setValue(SafetyCapacityNotification.WHEN_VIDEOS_IS_ENABLE.getName());
+		settingProperty2.setDeviceId(deviceId);
+		this.jabraCloudCommunicator.controlProperty(settingProperty2);
+
+		Map<String, String> properties = this.jabraCloudCommunicator.retrieveMultipleStatistics().stream()
+				.filter(aggregatedDevice -> aggregatedDevice.getDeviceId().equals(deviceId)).findFirst()
+				.map(AggregatedDevice::getProperties)
+				.map(p -> {
+					Map<String, String> m = new HashMap<>();
+					if (p.containsKey(settingProperty1.getProperty())) {
+						m.put(settingProperty1.getProperty(), p.get(settingProperty1.getProperty()));
+					}
+					if (p.containsKey(settingProperty2.getProperty())) {
+						m.put(settingProperty2.getProperty(), p.get(settingProperty2.getProperty()));
+					}
+					return m;
+				}).orElseGet(Collections::emptyMap);
+		this.verifyStatistics(properties);
+
+		//	Apply the changes with settings
+		ControllableProperty changesProperty = new ControllableProperty();
+		changesProperty.setProperty("Settings#" + SettingProperty.APPLY.getName());
+		changesProperty.setValue(Constant.NOT_AVAILABLE);
+		changesProperty.setDeviceId(deviceId);
+		this.jabraCloudCommunicator.controlProperty(changesProperty);
 	}
 
 	private void verifyStatistics(Map<String, String> statistics) {
