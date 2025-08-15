@@ -259,7 +259,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			String propertyName = controllerParts[1];
 
 			if (!groupName.equals(Constant.AGGREGATED_SETTINGS_GROUP)) {
-				this.logger.warn("Can't defined the controller: " + controllableProperty.getProperty());
+				this.logger.warn("Cannot define the controllable property: " + controllableProperty.getProperty());
 				return;
 			}
 			if (SettingProperty.isSupportedProperty(propertyName)) {
