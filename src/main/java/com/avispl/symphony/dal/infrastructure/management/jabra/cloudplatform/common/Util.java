@@ -301,6 +301,9 @@ public class Util {
 				return getSelectedSetting(settings.getSettingsRevertToDefault(), property.getType());
 			case VIDEO_STITCHING:
 				return getSelectedSetting(settings.getVideoStitching(), property.getType());
+			case APPLY:
+			case CANCEL:
+				return property.getName();
 			default:
 				if (LOGGER.isWarnEnabled()) {
 					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToSettingsValue", property));

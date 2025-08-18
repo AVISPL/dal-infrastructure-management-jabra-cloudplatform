@@ -3,6 +3,10 @@
  */
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated;
 
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Set;
+
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bases.BaseProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bases.BaseSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.AutomaticZoomMode;
@@ -12,6 +16,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.typ
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.SafetyCapacityNotification;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.SettingsRevertToDefault;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.VideoStitching;
+import com.avispl.symphony.dal.util.StringUtils;
 
 /**
  * Represents setting properties of an aggregated device.
@@ -26,7 +31,9 @@ public enum SettingProperty implements BaseProperty {
 	FIELD_OF_VIEW("FieldOfView(deg)", FieldOfView.class, "fieldOfView"),
 	SAFETY_CAPACITY_NOTIFICATION("SafetyCapacityNotification", SafetyCapacityNotification.class, "safetyCapacityNotification"),
 	SETTINGS_REVERT_TO_DEFAULT("SettingsRevertToDefault", SettingsRevertToDefault.class, "settingsRevertToDefault"),
-	VIDEO_STITCHING("VideoStitching", VideoStitching.class, "videoStiching");
+	VIDEO_STITCHING("VideoStitching", VideoStitching.class, "videoStiching"),
+	APPLY("Apply", null, null),
+	CANCEL("Cancel", null, null);
 
 	private final String name;
 	private final Class<? extends BaseSetting> type;
@@ -64,5 +71,34 @@ public enum SettingProperty implements BaseProperty {
 	 */
 	public String getApiField() {
 		return apiField;
+	}
+
+	public static SettingProperty getByApiField(String apiField) {
+		return Arrays.stream(values()).filter(property -> property.apiField.equals(apiField)).findFirst().orElse(null);
+	}
+
+	/**
+	 * Returns an enum set of supported SettingProperty from a supported device.
+	 *
+	 * @return an EnumSet containing all supported SettingProperty values
+	 */
+	public static Set<SettingProperty> getSupportedProperties() {
+		return EnumSet.of(
+				AUTOMATIC_ZOOM_MODE, AUTOMATIC_ZOOM_SPEED, DYNAMIC_COMPOSITION, FIELD_OF_VIEW,
+				SAFETY_CAPACITY_NOTIFICATION, SETTINGS_REVERT_TO_DEFAULT, VIDEO_STITCHING
+		);
+	}
+
+	/**
+	 * Checks if a property name is supported.
+	 *
+	 * @param name the name of the property to check, may be null or empty
+	 * @return {@code true} if the property name is supported; {@code false} otherwise
+	 */
+	public static boolean isSupportedProperty(String name) {
+		if (StringUtils.isNullOrEmpty(name)) {
+			return false;
+		}
+		return getSupportedProperties().stream().anyMatch(property -> property.getName().equals(name));
 	}
 }
