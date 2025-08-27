@@ -12,7 +12,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
 
 /**
- * Utility class that defines API endpoint paths and URI patterns for REST controllers.
+ * Utility class that defines API endpoint paths and URI patterns.
  *
  * @author Kevin / Symphony Dev Team
  * @since 1.0.0
