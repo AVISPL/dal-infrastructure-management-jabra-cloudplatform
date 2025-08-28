@@ -649,11 +649,11 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		if (!updatedSettingsCache.isEmpty()) {
 			controllableProperties.add(this.generateControllableButton(
 					String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.APPLY.getName()),
-					SettingProperty.APPLY.getName(), "Changing", SETTING_UPDATE_TIME
+					"Apply", "Applying", SETTING_UPDATE_TIME
 			));
 			controllableProperties.add(this.generateControllableButton(
 					String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.CANCEL.getName()),
-					SettingProperty.CANCEL.getName(), "Canceling", 0L
+					"Cancel", "Canceling", 0L
 			));
 		}
 
