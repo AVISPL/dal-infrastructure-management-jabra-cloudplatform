@@ -32,8 +32,8 @@ public enum SettingProperty implements BaseProperty {
 	SAFETY_CAPACITY_NOTIFICATION("SafetyCapacityNotification", SafetyCapacityNotification.class, "safetyCapacityNotification"),
 	SETTINGS_REVERT_TO_DEFAULT("SettingsRevertToDefault", SettingsRevertToDefault.class, "settingsRevertToDefault"),
 	VIDEO_STITCHING("VideoStitching", VideoStitching.class, "videoStiching"),
-	APPLY("Apply Settings", null, null),
-	CANCEL("Cancel Settings", null, null);
+	APPLY("ApplySettings", null, null),
+	CANCEL("CancelSettings", null, null);
 
 	private final String name;
 	private final Class<? extends BaseSetting> type;
