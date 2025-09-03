@@ -543,14 +543,22 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	/**
-	 * Returns a map of setting properties and their selected values for a given device.
+	 * Returns a map of setting properties and their resolved values for a given device.
 	 * <p>
-	 * If the device is disconnected, actual values are returned; otherwise, values are
-	 * marked as {@link Constant#NOT_AVAILABLE}. Returns an empty map if the device is null.
+	 * - If the device is {@code null}, a warning is logged and an empty map is returned. <br>
+	 * - If the device is unsupported, properties are retrieved from {@code unsupportedDevicesSettings}. <br>
+	 * - If no {@link Settings} exist or they are invalid, an empty map is returned. <br>
+	 * - Otherwise, properties are built from {@link Settings} and the updated settings cache. <br>
+	 * - {@code DYNAMIC_COMPOSITION} controls whether additional properties such as
+	 *   {@code AUTOMATIC_ZOOM_MODE}, {@code AUTOMATIC_ZOOM_SPEED}, {@code SETTINGS_REVERT_TO_DEFAULT},
+	 *   {@code FIELD_OF_VIEW}, and {@code VIDEO_STITCHING} are included. <br>
+	 * - {@code SAFETY_CAPACITY_NOTIFICATION} is always included. <br>
+	 * - If the updated settings cache is not empty, {@code APPLY} and {@code CANCEL}
+	 *   are also added, marked as {@link Constant#NOT_AVAILABLE} when the device is connected.
 	 * </p>
 	 *
 	 * @param device the target device
-	 * @return a map of property names and selected values, or an empty map if unavailable
+	 * @return a map of property names and their values, or an empty map if unavailable
 	 */
 	private Map<String, String> getSettingsProperties(Device device) {
 		if (device == null) {
@@ -574,18 +582,18 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		String automaticZoomMode = Optional.ofNullable(updatedSettingsCache.get(SettingProperty.AUTOMATIC_ZOOM_MODE.getApiField()))
 				.map(OptionDetail::getSelected)
 				.orElse(Optional.ofNullable(settings.getAutomaticZoomMode()).orElse(new SettingDetail()).getSelected());
-		Map<String, String> properties = new HashMap<>(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.DYNAMIC_COMPOSITION));
+		Map<String, String> properties = new HashMap<>(this.generateSettingsProperty(settings, SettingProperty.DYNAMIC_COMPOSITION));
 
 		if (Objects.equals(dynamicComposition, DynamicComposition.OFF.getValue())) {
-			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.AUTOMATIC_ZOOM_MODE));
+			properties.putAll(this.generateSettingsProperty(settings, SettingProperty.AUTOMATIC_ZOOM_MODE));
 			if (!Objects.equals(automaticZoomMode, AutomaticZoomMode.FULL_SCREEN.getValue())) {
-				properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.AUTOMATIC_ZOOM_SPEED));
+				properties.putAll(this.generateSettingsProperty(settings, SettingProperty.AUTOMATIC_ZOOM_SPEED));
 			}
-			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.SETTINGS_REVERT_TO_DEFAULT));
-			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.FIELD_OF_VIEW));
-			properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.VIDEO_STITCHING));
+			properties.putAll(this.generateSettingsProperty(settings, SettingProperty.SETTINGS_REVERT_TO_DEFAULT));
+			properties.putAll(this.generateSettingsProperty(settings, SettingProperty.FIELD_OF_VIEW));
+			properties.putAll(this.generateSettingsProperty(settings, SettingProperty.VIDEO_STITCHING));
 		}
-		properties.putAll(this.generateSettingsProperty(isConnectedDevice, settings, SettingProperty.SAFETY_CAPACITY_NOTIFICATION));
+		properties.putAll(this.generateSettingsProperty(settings, SettingProperty.SAFETY_CAPACITY_NOTIFICATION));
 		if (!updatedSettingsCache.isEmpty()) {
 			properties.putAll(this.generateSettingsProperty(isConnectedDevice, device.getId(), SettingProperty.APPLY));
 			properties.putAll(this.generateSettingsProperty(isConnectedDevice, device.getId(), SettingProperty.CANCEL));
@@ -687,20 +695,17 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	/**
 	 * Generates a supported settings property ({@link SettingProperty#getSupportedProperties()}) map for a given device setting.
 	 * <p>
-	 * The method constructs a property name using a predefined format and determines the corresponding value
-	 * based on the device's connection status. If the device is connected, a {@link Constant#NOT_AVAILABLE} is returned.
-	 * Otherwise, it attempts to extract the value from the provided {@link Settings} object using a utility method.
+	 * The method constructs a property name using a predefined format and attempts to extract the value
+	 * from the provided {@link Settings} object using a utility method. If no value is found,
+	 * {@link Constant#NOT_AVAILABLE} is used as a fallback.
 	 *
-	 * @param isConnected whether the device is currently connected
 	 * @param settings the {@link Settings} object containing the device's configuration
 	 * @param property the specific {@link SettingProperty} to extract the value for
 	 * @return a singleton map where the key is the generated property name and the value is the resolved setting value or a default fallback
 	 */
-	private Map<String, String> generateSettingsProperty(boolean isConnected, Settings settings, SettingProperty property) {
+	private Map<String, String> generateSettingsProperty(Settings settings, SettingProperty property) {
 		String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, property.getName());
-		String propertyValue = isConnected
-				? Constant.NOT_AVAILABLE
-				: Optional.ofNullable(Util.mapToSettingsProperty(property, settings)).orElse(Constant.NOT_AVAILABLE);
+		String propertyValue = Optional.ofNullable(Util.mapToSettingsProperty(property, settings)).orElse(Constant.NOT_AVAILABLE);
 
 		return Collections.singletonMap(propertyName, propertyValue);
 	}
