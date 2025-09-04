@@ -31,6 +31,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import javax.security.auth.login.FailedLoginException;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.MapUtils;
 
 import com.avispl.symphony.api.dal.control.Controller;
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
@@ -78,6 +79,10 @@ import com.avispl.symphony.dal.util.StringUtils;
  * @since 1.0.0
  */
 public class JabraCloudCommunicator extends RestCommunicator implements Monitorable, Controller, Aggregator {
+	private static final Set<String> DEFAULT_GRAPH_PROPERTIES = new HashSet<>(Arrays.asList(
+			GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getName(),
+			GeneralProperty.MONITORED_DEVICES_TOTAL.getName()
+	));
 	private static final long UPDATED_SETTINGS_CACHE_EXPIRY_TIME = Duration.ofMinutes(5).toMillis();
 	private static final long SETTING_UPDATE_TIME = Duration.ofMinutes(3).toMillis();
 
@@ -199,6 +204,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 
 			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 			extendedStatistics.setStatistics(statistics);
+			extendedStatistics.setDynamicStatistics(this.getDynamicStatistics(statistics));
 			this.localExtendedStatistics = extendedStatistics;
 		} finally {
 			this.reentrantLock.unlock();
@@ -477,6 +483,33 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 
 		return properties;
+	}
+
+	/**
+	 * Returns dynamic statistics for the given input.
+	 * <p>
+	 * If the input map is empty, logs a warning and returns an empty map.
+	 * Otherwise, builds a map of {@code DEFAULT_GRAPHS} with values from
+	 * {@code statistics}, or {@link Constant#NOT_AVAILABLE} if missing.
+	 * </p>
+	 *
+	 * @param statistics the input statistics
+	 * @return a map of default graphs and their values, or an empty map if none
+	 */
+	private Map<String, String> getDynamicStatistics(Map<String, String> statistics) {
+		if (MapUtils.isEmpty(statistics)) {
+			this.logger.warn(Constant.STATISTICS_EMPTY_WARNING);
+			return Collections.emptyMap();
+		}
+
+		Map<String, String> dynamicStatistic = new HashMap<>();
+		DEFAULT_GRAPH_PROPERTIES.forEach(defaultGraph -> {
+			String statisticValue = Optional.ofNullable(statistics.get(defaultGraph)).orElse(Constant.NOT_AVAILABLE);
+
+			dynamicStatistic.put(defaultGraph, statisticValue);
+		});
+
+		return dynamicStatistic;
 	}
 
 	/**
