@@ -50,6 +50,7 @@ public class Constant {
 	public static final String LIST_EMPTY_WARNING = "The list of %s is empty, returning empty collection";
 	public static final String OBJECT_EMPTY_WARNING = "The %s is null, returning empty collection";
 	public static final String UNSUPPORTED_MAP_PROPERTY_WARNING = "Unsupported %s with property %s";
+	public static final String STATISTICS_EMPTY_WARNING = "The statistics are empty, returning empty map.";
 
 	//	Fail messages
 	public static final String READ_PROPERTIES_FILE_FAILED = "Failed to load properties file: ";
