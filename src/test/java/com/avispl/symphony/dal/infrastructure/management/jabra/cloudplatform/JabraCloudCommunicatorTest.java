@@ -55,6 +55,8 @@ class JabraCloudCommunicatorTest {
 
 	@Test
 	void testGetMultipleStatistics() throws Exception {
+		this.jabraCloudCommunicator.setConfigManagement(true);
+		this.jabraCloudCommunicator.setShowAllDevices(true);
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		Map<String, String> statistics = this.extendedStatistics.getStatistics();
 		List<AdvancedControllableProperty> controllableProperties = this.extendedStatistics.getControllableProperties();
@@ -67,10 +69,10 @@ class JabraCloudCommunicatorTest {
 	void testRetrieveMultipleStatistics() throws Exception {
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		this.jabraCloudCommunicator.retrieveMultipleStatistics();
-		Util.delayExecution(10000);
+		Util.delayExecution(5000);
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		this.jabraCloudCommunicator.retrieveMultipleStatistics();
-		Util.delayExecution(10000);
+		Util.delayExecution(5000);
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		List<AggregatedDevice> aggregatedDevices = this.jabraCloudCommunicator.retrieveMultipleStatistics();
 

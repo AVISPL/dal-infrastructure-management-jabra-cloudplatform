@@ -28,6 +28,7 @@ public class Constant {
 	public static final String COMMA = ",";
 	public static final String HASH_SYMBOL = "#";
 	public static final String UNDERSCORE = "_";
+	public static final String EMPTY = "";
 
 	//	Groups
 	public static final String GENERAL_GROUP = "General";
@@ -38,6 +39,7 @@ public class Constant {
 
 	//	Values
 	public static final String NOT_AVAILABLE = "N/A";
+	public static final String MEETING_ROOM = "MeetingRoom";
 	public static final AdvancedControllableProperty DUMMY_CONTROLLER = new AdvancedControllableProperty(null, null, new Button(), null);
 
 	//	Info messages

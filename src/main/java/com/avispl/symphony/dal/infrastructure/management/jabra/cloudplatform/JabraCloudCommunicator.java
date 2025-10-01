@@ -157,6 +157,11 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Set<SettingsRequest> updatedSettingsCaches;
 
+	/** Indicates whether all devices should be shown. */
+	private boolean showAllDevices;
+	/** Indicates whether control properties are visible; defaults to false. */
+	private boolean configManagement;
+
 	public JabraCloudCommunicator() {
 		this.reentrantLock = new ReentrantLock();
 		this.versionProperties = new Properties();
@@ -173,6 +178,45 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.unsupportedDevicesSettings = new HashMap<>();
 		this.rooms = new ArrayList<>();
 		this.updatedSettingsCaches = new HashSet<>();
+
+		this.showAllDevices = false;
+		this.configManagement = false;
+	}
+
+	/**
+	 * Retrieves {@link #showAllDevices}
+	 *
+	 * @return value of {@link #showAllDevices}
+	 */
+	public boolean getShowAllDevices() {
+		return showAllDevices;
+	}
+
+	/**
+	 * Sets {@link #showAllDevices} value
+	 *
+	 * @param showAllDevices new value of {@link #showAllDevices}
+	 */
+	public void setShowAllDevices(boolean showAllDevices) {
+		this.showAllDevices = showAllDevices;
+	}
+
+	/**
+	 * Retrieves {@link #configManagement}
+	 *
+	 * @return value of {@link #configManagement}
+	 */
+	public boolean isConfigManagement() {
+		return configManagement;
+	}
+
+	/**
+	 * Sets {@link #configManagement} value
+	 *
+	 * @param configManagement new value of {@link #configManagement}
+	 */
+	public void setConfigManagement(boolean configManagement) {
+		this.configManagement = configManagement;
 	}
 
 	/**
@@ -235,7 +279,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			properties.putAll(this.getClientProperties(device.getJabraClient()));
 			properties.putAll(this.getSettingsProperties(device));
 
-			List<AdvancedControllableProperty> controllableProperties = this.getSettingsControllers(device);
+			List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
+			if (this.configManagement) {
+				controllableProperties.addAll(this.getSettingsControllers(device));
+			}
 			Optional.of(controllableProperties).filter(List::isEmpty).ifPresent(l -> l.add(Constant.DUMMY_CONTROLLER));
 
 			aggregatedDevice.setProperties(properties);
@@ -394,10 +441,16 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.requestStateHandler.clearRequests();
 		this.devicesRooms.clear();
 		this.rooms.clear();
-		this.devices = this.fetchData(ApiConstant.GET_DEVICES_ENDPOINT, ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE);
+
+		//	Collect data for this.devices
+		this.devices = this.fetchData(
+				ApiConstant.GET_DEVICES_ENDPOINT + (this.showAllDevices ? Constant.EMPTY : ApiConstant.MEETING_ROOM_FILTER),
+				ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE
+		);
 		if (CollectionUtils.isEmpty(this.devices)) {
 			return;
 		}
+		//	Collect data for this.rooms and this.devicesRooms
 		Set<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toSet());
 		for (String groupId : groupIDs) {
 			String url = ApiConstant.GET_ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
@@ -409,6 +462,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.rooms.add(room);
 			this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
 		}
+		//	Update data for this.devices
 		this.devices.forEach(device -> {
 			Room room = this.rooms.stream().filter(r -> r.getGroupId().equals(device.getGroupId())).findFirst().orElse(null);
 			if (room == null) {

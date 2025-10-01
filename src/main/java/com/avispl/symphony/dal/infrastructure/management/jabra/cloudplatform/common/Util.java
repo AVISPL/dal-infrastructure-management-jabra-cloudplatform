@@ -157,6 +157,10 @@ public class Util {
 				return mapToValue(device.getProductName());
 			case VARIANT_TYPE:
 				return mapToValue(device.getVariantType());
+			case IS_MEETING_DEVICE:
+				return Optional.ofNullable(device.getJabraClient())
+						.map(JabraClient::getClientType).map(type -> mapToValue(Constant.MEETING_ROOM.equalsIgnoreCase(type)))
+						.orElse(null);
 			default:
 				if (LOGGER.isWarnEnabled()) {
 					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToAggregatedGeneralProperty", property));
