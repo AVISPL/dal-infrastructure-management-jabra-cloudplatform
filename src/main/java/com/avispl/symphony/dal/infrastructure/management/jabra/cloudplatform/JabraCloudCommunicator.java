@@ -51,6 +51,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.com
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant.ControlMethod;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.RequestTimeoutSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Computer;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.JabraClient;
@@ -157,10 +158,16 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Set<SettingsRequest> updatedSettingsCaches;
 
-	/** Indicates whether all devices should be shown. */
+	/** Indicates whether all devices should be shown; defaults to false. */
 	private boolean showAllDevices;
 	/** Indicates whether control properties are visible; defaults to false. */
 	private boolean configManagement;
+	/** Timeout control for retrieving {@link #devices}. */
+	private RequestTimeoutSetting devicesRetrievalTimeout;
+	/** Timeout control for retrieving {@link #rooms}. */
+	private RequestTimeoutSetting roomsRetrievalTimeout;
+	/** Timeout control for retrieving {@link #supportedDevicesSettings}. */
+	private RequestTimeoutSetting deviceSettingsRetrievalTimeout;
 
 	public JabraCloudCommunicator() {
 		this.reentrantLock = new ReentrantLock();
@@ -181,6 +188,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 
 		this.showAllDevices = false;
 		this.configManagement = false;
+		this.devicesRetrievalTimeout = new RequestTimeoutSetting("Devices");
+		this.roomsRetrievalTimeout = new RequestTimeoutSetting("Rooms");
+		this.deviceSettingsRetrievalTimeout = new RequestTimeoutSetting("Device settings");
 	}
 
 	/**
@@ -217,6 +227,60 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	public void setConfigManagement(boolean configManagement) {
 		this.configManagement = configManagement;
+	}
+
+	/**
+	 * Retrieves {@link #devicesRetrievalTimeout}
+	 *
+	 * @return value of {@link #devicesRetrievalTimeout}
+	 */
+	public long getDevicesRetrievalTimeout() {
+		return devicesRetrievalTimeout.getRetrievalTimeout();
+	}
+
+	/**
+	 * Sets {@link #devicesRetrievalTimeout} value
+	 *
+	 * @param devicesRetrievalTimeout new value of {@link #devicesRetrievalTimeout}
+	 */
+	public void setDevicesRetrievalTimeout(long devicesRetrievalTimeout) {
+		this.devicesRetrievalTimeout = new RequestTimeoutSetting("Devices", devicesRetrievalTimeout);
+	}
+
+	/**
+	 * Retrieves {@link #roomsRetrievalTimeout}
+	 *
+	 * @return value of {@link #roomsRetrievalTimeout}
+	 */
+	public long getRoomsRetrievalTimeout() {
+		return roomsRetrievalTimeout.getRetrievalTimeout();
+	}
+
+	/**
+	 * Sets {@link #roomsRetrievalTimeout} value
+	 *
+	 * @param roomsRetrievalTimeout new value of {@link #roomsRetrievalTimeout}
+	 */
+	public void setRoomsRetrievalTimeout(long roomsRetrievalTimeout) {
+		this.roomsRetrievalTimeout = new RequestTimeoutSetting("Rooms", roomsRetrievalTimeout);
+	}
+
+	/**
+	 * Retrieves {@link #deviceSettingsRetrievalTimeout}
+	 *
+	 * @return value of {@link #deviceSettingsRetrievalTimeout}
+	 */
+	public long getDeviceSettingsRetrievalTimeout() {
+		return deviceSettingsRetrievalTimeout.getRetrievalTimeout();
+	}
+
+	/**
+	 * Sets {@link #deviceSettingsRetrievalTimeout} value
+	 *
+	 * @param deviceSettingsRetrievalTimeout new value of {@link #deviceSettingsRetrievalTimeout}
+	 */
+	public void setDeviceSettingsRetrievalTimeout(long deviceSettingsRetrievalTimeout) {
+		this.deviceSettingsRetrievalTimeout = new RequestTimeoutSetting("Device settings", deviceSettingsRetrievalTimeout);
 	}
 
 	/**
@@ -272,6 +336,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			aggregatedDevice.setDeviceName(device.getProductName());
 			aggregatedDevice.setDeviceOnline(device.getConnected());
 			aggregatedDevice.setSerialNumber(device.getSerialNumber());
+			aggregatedDevice.setTimestamp(System.currentTimeMillis());
 
 			Map<String, String> properties = new HashMap<>();
 			properties.putAll(this.getAggregatedGeneralProperties(device));
@@ -383,6 +448,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	protected void internalDestroy() {
 		this.logger.info(Constant.DESTROY_INTERNAL_INFO + this);
 
+		this.deviceSettingsRetrievalTimeout = null;
+		this.roomsRetrievalTimeout = null;
+		this.devicesRetrievalTimeout = null;
 		this.updatedSettingsCaches = null;
 		this.rooms = null;
 		this.unsupportedDevicesSettings = null;
@@ -439,28 +507,34 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private void setupData() throws FailedLoginException {
 		this.requestStateHandler.clearRequests();
-		this.devicesRooms.clear();
-		this.rooms.clear();
 
 		//	Collect data for this.devices
-		this.devices = this.fetchData(
-				ApiConstant.GET_DEVICES_ENDPOINT + (this.showAllDevices ? Constant.EMPTY : ApiConstant.MEETING_ROOM_FILTER),
-				ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE
-		);
+		if (this.devicesRetrievalTimeout.isValid()) {
+			this.logger.info(this.devicesRetrievalTimeout.getRetrievalAvailableInfo());
+			this.devices = this.fetchData(
+					ApiConstant.GET_DEVICES_ENDPOINT + (this.showAllDevices ? Constant.EMPTY : ApiConstant.MEETING_ROOM_FILTER),
+					ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE
+			);
+		}
 		if (CollectionUtils.isEmpty(this.devices)) {
 			return;
 		}
 		//	Collect data for this.rooms and this.devicesRooms
-		Set<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toSet());
-		for (String groupId : groupIDs) {
-			String url = ApiConstant.GET_ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
-			Room room = this.fetchData(url, Room.class);
-			if (room == null) {
-				continue;
-			}
+		if (this.roomsRetrievalTimeout.isValid()) {
+			this.logger.info(this.roomsRetrievalTimeout.getRetrievalAvailableInfo());
+			this.devicesRooms.clear();
+			this.rooms.clear();
+			Set<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toSet());
+			for (String groupId : groupIDs) {
+				String url = ApiConstant.GET_ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
+				Room room = this.fetchData(url, Room.class);
+				if (room == null) {
+					continue;
+				}
 
-			this.rooms.add(room);
-			this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
+				this.rooms.add(room);
+				this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
+			}
 		}
 		//	Update data for this.devices
 		this.devices.forEach(device -> {
@@ -491,7 +565,11 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private void setupDataLoader() {
 		if (this.executorService == null) {
 			this.executorService = Executors.newFixedThreadPool(1);
-			this.dataLoader = new JabraCloudDataLoader(this, this.devices, this.supportedDevicesSettings, this.unsupportedDevicesSettings);
+			this.dataLoader = new JabraCloudDataLoader(
+					this,
+					this.devices, this.supportedDevicesSettings, this.unsupportedDevicesSettings,
+					this.deviceSettingsRetrievalTimeout
+			);
 			this.executorService.submit(this.dataLoader);
 		}
 		this.dataLoader.setNextCollectionTime(System.currentTimeMillis());
