@@ -7,7 +7,7 @@ package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.co
 import java.time.Duration;
 
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
-import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty.Button;
+import com.avispl.symphony.dal.util.ControllablePropertyFactory;
 
 /**
  * Utility class that defines constant values used across the application.
@@ -42,13 +42,12 @@ public class Constant {
 	//	Values
 	public static final String NOT_AVAILABLE = "N/A";
 	public static final String MEETING_ROOM = "MeetingRoom";
-	public static final AdvancedControllableProperty DUMMY_CONTROLLER = new AdvancedControllableProperty(null, null, new Button(), null);
+	public static final AdvancedControllableProperty DUMMY_CONTROLLER = ControllablePropertyFactory.createText(null, null);
 	public static final long DEFAULT_MS_TIMEOUT = Duration.ofSeconds(30).toMillis();
 
 	//	Info messages
 	public static final String INITIAL_INTERNAL_INFO = "Initialing internal state of instance: ";
 	public static final String DESTROY_INTERNAL_INFO = "Destroying internal state of instance: ";
-	public static final String RETRIEVAL_AVAILABLE_INFO = "%s retrieval is available now. Next availability in %s seconds.";
 
 	//	Warning messages
 	public static final String CONTROLLABLE_PROPS_EMPTY_WARNING = "ControllableProperties list is null or empty, skipping control operation";

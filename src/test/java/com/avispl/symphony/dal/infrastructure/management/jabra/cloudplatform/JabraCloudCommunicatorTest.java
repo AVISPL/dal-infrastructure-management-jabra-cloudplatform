@@ -59,7 +59,8 @@ class JabraCloudCommunicatorTest {
 	void testGetMultipleStatistics() throws Exception {
 		this.jabraCloudCommunicator.setConfigManagement(true);
 		this.jabraCloudCommunicator.setShowAllDevices(true);
-		this.jabraCloudCommunicator.setDevicesRetrievalTimeout(Duration.ofSeconds(180).toMillis());
+		this.jabraCloudCommunicator.setDevicesInterval(Duration.ofSeconds(30).toMillis());
+		this.jabraCloudCommunicator.setRoomsInterval(Duration.ofSeconds(180).toMillis());
 		System.out.println("Start the first getMultipleStatistics()");
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		Util.delayExecution(Duration.ofSeconds(60).toMillis());
@@ -82,7 +83,7 @@ class JabraCloudCommunicatorTest {
 
 	@Test
 	void testRetrieveMultipleStatistics() throws Exception {
-		this.jabraCloudCommunicator.setDeviceSettingsRetrievalTimeout(Duration.ofSeconds(10).toMillis());
+		this.jabraCloudCommunicator.setDeviceSettingsInterval(Duration.ofSeconds(30).toMillis());
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		System.out.println("Start the first retrieveMultipleStatistics()");
 		this.jabraCloudCommunicator.retrieveMultipleStatistics();

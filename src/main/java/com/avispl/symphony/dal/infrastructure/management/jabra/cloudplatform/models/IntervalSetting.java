@@ -11,30 +11,27 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.com
  * @author Kevin / Symphony Dev Team
  * @since 1.0.0
  */
-public class RequestTimeoutSetting {
-	private final String name;
-	private final long retrievalTimeout;
+public class IntervalSetting {
+	private final long intervalMs;
 	private long validRetrievalTimestamp;
 
-	public RequestTimeoutSetting(String name) {
-		this.name = name;
-		this.retrievalTimeout = Constant.DEFAULT_MS_TIMEOUT;
+	public IntervalSetting() {
+		this.intervalMs = Constant.DEFAULT_MS_TIMEOUT;
 		this.validRetrievalTimestamp = System.currentTimeMillis();
 	}
 
-	public RequestTimeoutSetting(String name, long retrievalTimeout) {
-		this.name = name;
-		this.retrievalTimeout = Math.max(Constant.DEFAULT_MS_TIMEOUT, retrievalTimeout);
-		this.validRetrievalTimestamp = System.currentTimeMillis() + this.retrievalTimeout;
+	public IntervalSetting(long intervalMs) {
+		this.intervalMs = Math.max(Constant.DEFAULT_MS_TIMEOUT, intervalMs);
+		this.validRetrievalTimestamp = System.currentTimeMillis() + this.intervalMs;
 	}
 
 	/**
-	 * Retrieves {@link #retrievalTimeout}
+	 * Retrieves {@link #intervalMs}
 	 *
-	 * @return value of {@link #retrievalTimeout}
+	 * @return value of {@link #intervalMs}
 	 */
-	public long getRetrievalTimeout() {
-		return retrievalTimeout;
+	public long getIntervalMs() {
+		return intervalMs;
 	}
 
 	/**
@@ -49,19 +46,20 @@ public class RequestTimeoutSetting {
 	public boolean isValid() {
 		boolean isValid = System.currentTimeMillis() >= this.validRetrievalTimestamp;
 		if (isValid) {
-			this.validRetrievalTimestamp = System.currentTimeMillis() + this.retrievalTimeout;
+			this.validRetrievalTimestamp = System.currentTimeMillis() + this.intervalMs;
 		}
 		return isValid;
 	}
 
 	/**
-	 * Returns a message describing how many seconds remain
-	 * until the request becomes available again.
+	 * Returns a message indicating how long remains until the next retrieval becomes available.
+	 * <br/>
+	 * Example output: "Next availability in 12 seconds."
 	 *
-	 * @return formatted info string using {@link Constant#RETRIEVAL_AVAILABLE_INFO}
+	 * @return a message describing how many seconds remain until the next retrieval is allowed.
 	 */
-	public String getRetrievalAvailableInfo() {
+	public String getNextAvailabilityInfo() {
 		long seconds = Math.max((this.validRetrievalTimestamp - System.currentTimeMillis()) / 1000, 0);
-		return String.format(Constant.RETRIEVAL_AVAILABLE_INFO, this.name, seconds);
+		return String.format("Next availability in %s seconds.", seconds);
 	}
 }

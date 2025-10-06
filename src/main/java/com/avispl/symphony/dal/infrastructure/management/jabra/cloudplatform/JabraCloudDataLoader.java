@@ -13,7 +13,7 @@ import org.apache.commons.logging.LogFactory;
 
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.RequestTimeoutSetting;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.IntervalSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
 
@@ -34,7 +34,7 @@ public class JabraCloudDataLoader implements Runnable {
 	private final List<Device> devices;
 	private final Map<String, Settings> supportedDevicesSettings;
 	private final Map<String, Map<String, Map<String, Object>>> unSupportedDevicesSettings;
-	private final RequestTimeoutSetting deviceSettingsTimeout;
+	private final IntervalSetting deviceSettingsInterval;
 
 	private volatile boolean inProgress;
 	private volatile boolean devicePaused;
@@ -46,13 +46,13 @@ public class JabraCloudDataLoader implements Runnable {
 			JabraCloudCommunicator communicator,
 			List<Device> devices,
 			Map<String, Settings> supportedDevicesSettings, Map<String, Map<String, Map<String, Object>>> unSupportedDevicesSettings,
-			RequestTimeoutSetting deviceSettingsTimeout
+			IntervalSetting deviceSettingsInterval
 	) {
 		this.communicator = communicator;
 		this.devices = devices;
 		this.supportedDevicesSettings = supportedDevicesSettings;
 		this.unSupportedDevicesSettings = unSupportedDevicesSettings;
-		this.deviceSettingsTimeout = deviceSettingsTimeout;
+		this.deviceSettingsInterval = deviceSettingsInterval;
 
 		this.inProgress = true;
 		this.devicePaused = true;
@@ -93,8 +93,8 @@ public class JabraCloudDataLoader implements Runnable {
 
 			long currentTimestamp = System.currentTimeMillis();
 			if (!this.flag && this.nextCollectionTime < currentTimestamp) {
-				if (this.deviceSettingsTimeout.isValid()) {
-					this.logger.info(this.deviceSettingsTimeout.getRetrievalAvailableInfo());
+				if (this.deviceSettingsInterval.isValid()) {
+					this.logger.info(String.format("Device settings retrieval is available now. %s", this.deviceSettingsInterval.getNextAvailabilityInfo()));
 					this.collectAggregatedDeviceData();
 				}
 				this.flag = true;
