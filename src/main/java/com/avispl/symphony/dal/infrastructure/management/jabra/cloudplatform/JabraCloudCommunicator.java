@@ -165,6 +165,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private boolean configManagement;
 	/** Interval control for retrieving data from APIs. */
 	private EnumMap<RetrievalType, IntervalSetting> retrievalIntervals;
+	private Set<String> displayPropertyGroups;
 
 	public JabraCloudCommunicator() {
 		this.reentrantLock = new ReentrantLock();
@@ -186,6 +187,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.showAllDevices = false;
 		this.configManagement = false;
 		this.retrievalIntervals = new EnumMap<>(RetrievalType.class);
+		this.displayPropertyGroups = new HashSet<>();
 	}
 
 	/**
@@ -296,6 +298,30 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.lastMonitoringCycleDuration = lastMonitoringCycleDuration;
 	}
 
+	/**
+	 * Returns a comma-separated list of property group names that are configured to be displayed.
+	 *
+	 * @return a comma-separated string of display property group names; may be empty if no groups are configured
+	 */
+	public String getDisplayPropertyGroups() {
+		return String.join(Constant.COMMA, this.displayPropertyGroups);
+	}
+
+	/**
+	 * Sets the list of property groups to be displayed, using a comma-separated string from adapter properties.
+	 *
+	 * @param displayPropertyGroups a comma-separated list of property group names to display; may be {@code null} or empty
+	 */
+	public void setDisplayPropertyGroups(String displayPropertyGroups) {
+		this.displayPropertyGroups.clear();
+		if (StringUtils.isNullOrEmpty(displayPropertyGroups)) {
+			return;
+		}
+		Arrays.stream(displayPropertyGroups.split(Constant.COMMA)).map(String::trim)
+				.filter(displayPropertyGroup -> !displayPropertyGroup.isEmpty())
+				.forEach(displayPropertyGroup -> this.displayPropertyGroups.add(displayPropertyGroup));
+	}
+
 	@Override
 	protected void internalInit() throws Exception {
 		this.logger.info(Constant.INITIAL_INTERNAL_INFO + this);
@@ -310,9 +336,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.reentrantLock.lock();
 		try {
 			this.setupData();
-			Map<String, String> statistics = new HashMap<>();
-			statistics.putAll(this.getGeneralProperties());
-			statistics.putAll(this.getRoomProperties());
+			Map<String, String> statistics = new HashMap<>(this.getGeneralProperties());
+			if (this.shouldDisplayGroup(Constant.ROOM_GROUP)) {
+				statistics.putAll(this.getRoomProperties());
+			}
 
 			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 			extendedStatistics.setStatistics(statistics);
@@ -342,11 +369,16 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			aggregatedDevice.setSerialNumber(device.getSerialNumber());
 			aggregatedDevice.setTimestamp(System.currentTimeMillis());
 
-			Map<String, String> properties = new HashMap<>();
-			properties.putAll(this.getAggregatedGeneralProperties(device));
-			properties.putAll(this.getComputerProperties(device.getComputer()));
-			properties.putAll(this.getClientProperties(device.getJabraClient()));
-			properties.putAll(this.getSettingsProperties(device));
+			Map<String, String> properties = new HashMap<>(this.getAggregatedGeneralProperties(device));
+			if (this.shouldDisplayGroup(Constant.AGGREGATED_COMPUTER_GROUP)) {
+				properties.putAll(this.getComputerProperties(device.getComputer()));
+			}
+			if (this.shouldDisplayGroup(Constant.AGGREGATED_CLIENT_GROUP)) {
+				properties.putAll(this.getClientProperties(device.getJabraClient()));
+			}
+			if (this.shouldDisplayGroup(Constant.AGGREGATED_SETTINGS_GROUP)) {
+				properties.putAll(this.getSettingsProperties(device));
+			}
 
 			List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
 			if (this.configManagement) {
@@ -452,6 +484,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	protected void internalDestroy() {
 		this.logger.info(Constant.DESTROY_INTERNAL_INFO + this);
 
+		this.displayPropertyGroups = null;
 		this.retrievalIntervals = null;
 		this.updatedSettingsCaches = null;
 		this.rooms = null;
@@ -519,12 +552,12 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 					ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE
 			);
 		}
-		if (CollectionUtils.isEmpty(this.devices)) {
+		if (CollectionUtils.isEmpty(this.devices) || CollectionUtils.isEmpty(this.displayPropertyGroups)) {
 			return;
 		}
 		//	Collect data for this.rooms and this.devicesRooms
 		IntervalSetting roomsInterval = this.getIntervalSettingByType(RetrievalType.ROOMS);
-		if (roomsInterval.isValid()) {
+		if (roomsInterval.isValid() && this.shouldDisplayGroup(Constant.ROOM_GROUP)) {
 			this.logger.info(String.format("Rooms retrieval is available now. %s", roomsInterval.getNextAvailabilityInfo()));
 			this.devicesRooms.clear();
 			this.rooms.clear();
@@ -920,6 +953,16 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private IntervalSetting getIntervalSettingByType(RetrievalType type) {
 		return retrievalIntervals.computeIfAbsent(type, t -> new IntervalSetting());
+	}
+
+	/**
+	 * Checks whether the specified property group is configured to be displayed.
+	 *
+	 * @param groupName the name of the property group to check
+	 * @return {@code true} if the group is configured to be displayed; {@code false} otherwise
+	 */
+	public boolean shouldDisplayGroup(String groupName) {
+		return CollectionUtils.isNotEmpty(this.displayPropertyGroups) && this.displayPropertyGroups.contains(groupName);
 	}
 
 	/**

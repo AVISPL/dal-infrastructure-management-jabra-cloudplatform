@@ -82,6 +82,31 @@ class JabraCloudCommunicatorTest {
 	}
 
 	@Test
+	void testDisplayPropertyGroups() throws Exception {
+		this.jabraCloudCommunicator.setConfigManagement(true);
+		this.jabraCloudCommunicator.setShowAllDevices(true);
+		String[] groups = new String[] { Constant.ROOM_GROUP, Constant.AGGREGATED_COMPUTER_GROUP };
+		this.jabraCloudCommunicator.setDisplayPropertyGroups(String.join(Constant.COMMA, groups));
+		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		this.jabraCloudCommunicator.retrieveMultipleStatistics();
+		Util.delayExecution(Duration.ofSeconds(20).toMillis());
+		Map<String, String> statistics = this.extendedStatistics.getStatistics();
+		List<AdvancedControllableProperty> controllableProperties = this.extendedStatistics.getControllableProperties();
+		List<AggregatedDevice> aggregatedDevices = this.jabraCloudCommunicator.retrieveMultipleStatistics();
+
+		this.verifyStatistics(statistics);
+		if (CollectionUtils.isNotEmpty(controllableProperties)) {
+			controllableProperties.forEach(Assertions::assertNotNull);
+		}
+		aggregatedDevices.forEach(aggregatedDevice -> {
+			this.verifyStatistics(aggregatedDevice.getProperties());
+			if (CollectionUtils.isNotEmpty(aggregatedDevice.getControllableProperties())) {
+				controllableProperties.forEach(Assertions::assertNotNull);
+			}
+		});
+	}
+
+	@Test
 	void testRetrieveMultipleStatistics() throws Exception {
 		this.jabraCloudCommunicator.setDeviceSettingsInterval(Duration.ofSeconds(30).toMillis());
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);

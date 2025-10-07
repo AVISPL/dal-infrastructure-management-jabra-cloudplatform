@@ -13,6 +13,7 @@ import org.apache.commons.logging.LogFactory;
 
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.IntervalSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
@@ -39,7 +40,7 @@ public class JabraCloudDataLoader implements Runnable {
 	private volatile boolean inProgress;
 	private volatile boolean devicePaused;
 	private volatile long validRetrieveStatisticsTimestamp;
-	private volatile boolean flag;
+	private volatile boolean cycleExecuted;
 	private volatile long nextCollectionTime;
 
 	public JabraCloudDataLoader(
@@ -57,7 +58,7 @@ public class JabraCloudDataLoader implements Runnable {
 		this.inProgress = true;
 		this.devicePaused = true;
 		this.nextCollectionTime = System.currentTimeMillis();
-		this.flag = false;
+		this.cycleExecuted = false;
 	}
 
 	/**
@@ -92,12 +93,12 @@ public class JabraCloudDataLoader implements Runnable {
 			}
 
 			long currentTimestamp = System.currentTimeMillis();
-			if (!this.flag && this.nextCollectionTime < currentTimestamp) {
-				if (this.deviceSettingsInterval.isValid()) {
+			if (!this.cycleExecuted && this.nextCollectionTime < currentTimestamp) {
+				if (this.deviceSettingsInterval.isValid() && this.communicator.shouldDisplayGroup(Constant.AGGREGATED_SETTINGS_GROUP)) {
 					this.logger.info(String.format("Device settings retrieval is available now. %s", this.deviceSettingsInterval.getNextAvailabilityInfo()));
 					this.collectAggregatedDeviceData();
 				}
-				this.flag = true;
+				this.cycleExecuted = true;
 			}
 
 			if (!this.inProgress) {
@@ -109,10 +110,10 @@ public class JabraCloudDataLoader implements Runnable {
 			while (this.nextCollectionTime > System.currentTimeMillis()) {
 				Util.delayExecution(1000);
 			}
-			if (this.flag) {
+			if (this.cycleExecuted) {
 				this.nextCollectionTime = System.currentTimeMillis() + POLLING_CYCLE_INTERVAL;
 				this.communicator.setLastMonitoringCycleDuration(System.currentTimeMillis() - startCycle);
-				this.flag = false;
+				this.cycleExecuted = false;
 			}
 		}
 	}
