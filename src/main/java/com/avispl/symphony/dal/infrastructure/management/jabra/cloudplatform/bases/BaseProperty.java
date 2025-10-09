@@ -4,6 +4,8 @@
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bases;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Marker interface for property enums that define group attributes.
@@ -20,14 +22,14 @@ public interface BaseProperty {
 	String getName();
 
 	/**
-	 * Returns an array of all property names defined in the specified enum class.
+	 * Returns a list of all property names defined in the specified enum class.
 	 *
 	 * @param enumClass the enum class
 	 * @param <E> the type of the enum
-	 * @return an array of property names
+	 * @return a list of property names
 	 */
-	static <E extends BaseProperty> String[] getNames(Class<E> enumClass) {
-		return Arrays.stream(enumClass.getEnumConstants()).map(E::getName).toArray(String[]::new);
+	static <E extends BaseProperty> List<String> getNames(Class<E> enumClass) {
+		return Arrays.stream(enumClass.getEnumConstants()).map(E::getName).collect(Collectors.toList());
 	}
 
 	/**

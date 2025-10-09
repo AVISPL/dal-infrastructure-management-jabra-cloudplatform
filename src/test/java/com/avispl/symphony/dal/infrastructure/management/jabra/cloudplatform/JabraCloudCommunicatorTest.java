@@ -3,6 +3,7 @@
  */
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,30 +57,82 @@ class JabraCloudCommunicatorTest {
 
 	@Test
 	void testGetMultipleStatistics() throws Exception {
+		this.jabraCloudCommunicator.setConfigManagement(true);
+		this.jabraCloudCommunicator.setShowAllDevices(true);
+		this.jabraCloudCommunicator.setDevicesInterval(Duration.ofSeconds(30).toMillis());
+		this.jabraCloudCommunicator.setRoomsInterval(Duration.ofSeconds(180).toMillis());
+		System.out.println("Start the first getMultipleStatistics()");
+		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		Util.delayExecution(Duration.ofSeconds(60).toMillis());
+		System.out.println("Start the second getMultipleStatistics()");
+		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		Util.delayExecution(Duration.ofSeconds(60).toMillis());
+		System.out.println("Start the third getMultipleStatistics()");
+		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		Util.delayExecution(Duration.ofSeconds(60).toMillis());
+		System.out.println("Start the forth getMultipleStatistics()");
+		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		Util.delayExecution(Duration.ofSeconds(60).toMillis());
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		Map<String, String> statistics = this.extendedStatistics.getStatistics();
 		List<AdvancedControllableProperty> controllableProperties = this.extendedStatistics.getControllableProperties();
 
 		this.verifyStatistics(statistics);
-		controllableProperties.forEach(Assertions::assertNotNull);
+		if (CollectionUtils.isNotEmpty(controllableProperties)) controllableProperties.forEach(Assertions::assertNotNull);
+	}
+
+	@Test
+	void testDisplayPropertyGroups() throws Exception {
+		this.jabraCloudCommunicator.setConfigManagement(true);
+		this.jabraCloudCommunicator.setShowAllDevices(true);
+		String[] groups = new String[] { Constant.ROOM_GROUP, Constant.AGGREGATED_COMPUTER_GROUP };
+		this.jabraCloudCommunicator.setDisplayPropertyGroups(String.join(Constant.COMMA, groups));
+		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		this.jabraCloudCommunicator.retrieveMultipleStatistics();
+		Util.delayExecution(Duration.ofSeconds(20).toMillis());
+		Map<String, String> statistics = this.extendedStatistics.getStatistics();
+		List<AdvancedControllableProperty> controllableProperties = this.extendedStatistics.getControllableProperties();
+		List<AggregatedDevice> aggregatedDevices = this.jabraCloudCommunicator.retrieveMultipleStatistics();
+
+		this.verifyStatistics(statistics);
+		if (CollectionUtils.isNotEmpty(controllableProperties)) {
+			controllableProperties.forEach(Assertions::assertNotNull);
+		}
+		aggregatedDevices.forEach(aggregatedDevice -> {
+			this.verifyStatistics(aggregatedDevice.getProperties());
+			if (CollectionUtils.isNotEmpty(aggregatedDevice.getControllableProperties())) {
+				controllableProperties.forEach(Assertions::assertNotNull);
+			}
+		});
 	}
 
 	@Test
 	void testRetrieveMultipleStatistics() throws Exception {
+		this.jabraCloudCommunicator.setDeviceSettingsInterval(Duration.ofSeconds(30).toMillis());
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		System.out.println("Start the first retrieveMultipleStatistics()");
 		this.jabraCloudCommunicator.retrieveMultipleStatistics();
-		Util.delayExecution(10000);
+		Util.delayExecution(Duration.ofSeconds(15).toMillis());
+		System.out.println("Completed delayExecution() from the first retrieveMultipleStatistics()");
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		System.out.println("Start the second retrieveMultipleStatistics()");
 		this.jabraCloudCommunicator.retrieveMultipleStatistics();
-		Util.delayExecution(10000);
+		Util.delayExecution(Duration.ofSeconds(15).toMillis());
+		System.out.println("Completed delayExecution() from the second retrieveMultipleStatistics()");
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		System.out.println("Start the third retrieveMultipleStatistics()");
+		this.jabraCloudCommunicator.retrieveMultipleStatistics();
+		Util.delayExecution(Duration.ofSeconds(15).toMillis());
+		System.out.println("Completed delayExecution() from the third retrieveMultipleStatistics()");
+		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
+		System.out.println("Start the forth retrieveMultipleStatistics()");
 		List<AggregatedDevice> aggregatedDevices = this.jabraCloudCommunicator.retrieveMultipleStatistics();
 
 		aggregatedDevices.forEach(aggregatedDevice -> {
 			List<AdvancedControllableProperty> controllableProperties = aggregatedDevice.getControllableProperties();
 
 			this.verifyStatistics(aggregatedDevice.getProperties());
-			controllableProperties.forEach(Assertions::assertNotNull);
+			if (CollectionUtils.isNotEmpty(controllableProperties)) controllableProperties.forEach(Assertions::assertNotNull);
 		});
 	}
 

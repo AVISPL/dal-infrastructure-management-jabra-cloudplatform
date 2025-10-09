@@ -8,7 +8,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Date;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -35,7 +35,6 @@ import org.apache.commons.collections.MapUtils;
 
 import com.avispl.symphony.api.dal.control.Controller;
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
-import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty.Button;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
@@ -51,6 +50,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.com
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant.ControlMethod;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.IntervalSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Computer;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.JabraClient;
@@ -60,6 +60,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.Room;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.SettingDetail;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.RetrievalType;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AggregatedGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ClientProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ComputerProperty;
@@ -69,6 +70,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.typ
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.RoomProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.AutomaticZoomMode;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.DynamicComposition;
+import com.avispl.symphony.dal.util.ControllablePropertyFactory;
 import com.avispl.symphony.dal.util.StringUtils;
 
 /**
@@ -157,6 +159,14 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Set<SettingsRequest> updatedSettingsCaches;
 
+	/** Indicates whether all devices should be shown; defaults to false. */
+	private boolean showAllDevices;
+	/** Indicates whether control properties are visible; defaults to false. */
+	private boolean configManagement;
+	/** Interval control for retrieving data from APIs. */
+	private EnumMap<RetrievalType, IntervalSetting> retrievalIntervals;
+	private Set<String> displayPropertyGroups;
+
 	public JabraCloudCommunicator() {
 		this.reentrantLock = new ReentrantLock();
 		this.versionProperties = new Properties();
@@ -173,6 +183,110 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.unsupportedDevicesSettings = new HashMap<>();
 		this.rooms = new ArrayList<>();
 		this.updatedSettingsCaches = new HashSet<>();
+
+		this.showAllDevices = false;
+		this.configManagement = false;
+		this.retrievalIntervals = new EnumMap<>(RetrievalType.class);
+		this.displayPropertyGroups = new HashSet<>();
+	}
+
+	/**
+	 * Retrieves {@link #showAllDevices}
+	 *
+	 * @return value of {@link #showAllDevices}
+	 */
+	public boolean getShowAllDevices() {
+		return showAllDevices;
+	}
+
+	/**
+	 * Sets {@link #showAllDevices} value
+	 *
+	 * @param showAllDevices new value of {@link #showAllDevices}
+	 */
+	public void setShowAllDevices(boolean showAllDevices) {
+		this.showAllDevices = showAllDevices;
+	}
+
+	/**
+	 * Retrieves {@link #configManagement}
+	 *
+	 * @return value of {@link #configManagement}
+	 */
+	public boolean isConfigManagement() {
+		return configManagement;
+	}
+
+	/**
+	 * Sets {@link #configManagement} value
+	 *
+	 * @param configManagement new value of {@link #configManagement}
+	 */
+	public void setConfigManagement(boolean configManagement) {
+		this.configManagement = configManagement;
+	}
+
+	/**
+	 * Returns the configured retrieval interval (in milliseconds) for aggregated device information.
+	 * <p>
+	 * If the interval has not been explicitly set, a default {@link IntervalSetting}
+	 * will be created and returned.
+	 *
+	 * @return the retrieval interval for aggregated devices, in milliseconds
+	 */
+	public long getDevicesInterval() {
+		return this.getIntervalSettingByType(RetrievalType.DEVICES).getIntervalMs();
+	}
+
+	/**
+	 * Sets the retrieval interval(ms) for aggregated device's general from adapter properties.
+	 *
+	 * @param devicesInterval the interval duration(ms)
+	 */
+	public void setDevicesInterval(long devicesInterval) {
+		this.retrievalIntervals.put(RetrievalType.DEVICES, new IntervalSetting(devicesInterval));
+	}
+
+	/**
+	 * Returns the configured retrieval interval(ms) for room group.
+	 * <p>
+	 * If the interval has not been explicitly set, a default {@link IntervalSetting}
+	 * will be created and returned.
+	 *
+	 * @return the retrieval interval for rooms(ms)
+	 */
+	public long getRoomsInterval() {
+		return this.getIntervalSettingByType(RetrievalType.ROOMS).getIntervalMs();
+	}
+
+	/**
+	 * Sets the retrieval interval(ms) for room group from adapter properties.
+	 *
+	 * @param roomsInterval the interval duration(ms)
+	 */
+	public void setRoomsInterval(long roomsInterval) {
+		this.retrievalIntervals.put(RetrievalType.ROOMS, new IntervalSetting(roomsInterval));
+	}
+
+	/**
+	 * Returns the configured retrieval interval(ms) for device settings of aggregated device.
+	 * <p>
+	 * If the interval has not been explicitly set, a default {@link IntervalSetting}
+	 * will be created and returned.
+	 *
+	 * @return the retrieval interval for device settings(ms)
+	 */
+	public long getDeviceSettingsInterval() {
+		return this.getIntervalSettingByType(RetrievalType.DEVICE_SETTINGS).getIntervalMs();
+	}
+
+	/**
+	 * Sets the retrieval interval(ms) for device settings from adapter properties.
+	 *
+	 * @param deviceSettingsInterval the interval duration(ms)
+	 */
+	public void setDeviceSettingsInterval(long deviceSettingsInterval) {
+		this.retrievalIntervals.put(RetrievalType.DEVICE_SETTINGS, new IntervalSetting(deviceSettingsInterval));
 	}
 
 	/**
@@ -182,6 +296,30 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	public void setLastMonitoringCycleDuration(Long lastMonitoringCycleDuration) {
 		this.lastMonitoringCycleDuration = lastMonitoringCycleDuration;
+	}
+
+	/**
+	 * Returns a comma-separated list of property group names that are configured to be displayed.
+	 *
+	 * @return a comma-separated string of display property group names; may be empty if no groups are configured
+	 */
+	public String getDisplayPropertyGroups() {
+		return String.join(Constant.COMMA, this.displayPropertyGroups);
+	}
+
+	/**
+	 * Sets the list of property groups to be displayed, using a comma-separated string from adapter properties.
+	 *
+	 * @param displayPropertyGroups a comma-separated list of property group names to display; may be {@code null} or empty
+	 */
+	public void setDisplayPropertyGroups(String displayPropertyGroups) {
+		this.displayPropertyGroups.clear();
+		if (StringUtils.isNullOrEmpty(displayPropertyGroups)) {
+			return;
+		}
+		Arrays.stream(displayPropertyGroups.split(Constant.COMMA)).map(String::trim)
+				.filter(displayPropertyGroup -> !displayPropertyGroup.isEmpty())
+				.forEach(displayPropertyGroup -> this.displayPropertyGroups.add(displayPropertyGroup));
 	}
 
 	@Override
@@ -198,9 +336,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.reentrantLock.lock();
 		try {
 			this.setupData();
-			Map<String, String> statistics = new HashMap<>();
-			statistics.putAll(this.getGeneralProperties());
-			statistics.putAll(this.getRoomProperties());
+			Map<String, String> statistics = new HashMap<>(this.getGeneralProperties());
+			if (this.shouldDisplayGroup(Constant.ROOM_GROUP)) {
+				statistics.putAll(this.getRoomProperties());
+			}
 
 			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 			extendedStatistics.setStatistics(statistics);
@@ -228,14 +367,23 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			aggregatedDevice.setDeviceName(device.getProductName());
 			aggregatedDevice.setDeviceOnline(device.getConnected());
 			aggregatedDevice.setSerialNumber(device.getSerialNumber());
+			aggregatedDevice.setTimestamp(System.currentTimeMillis());
 
-			Map<String, String> properties = new HashMap<>();
-			properties.putAll(this.getAggregatedGeneralProperties(device));
-			properties.putAll(this.getComputerProperties(device.getComputer()));
-			properties.putAll(this.getClientProperties(device.getJabraClient()));
-			properties.putAll(this.getSettingsProperties(device));
+			Map<String, String> properties = new HashMap<>(this.getAggregatedGeneralProperties(device));
+			if (this.shouldDisplayGroup(Constant.AGGREGATED_COMPUTER_GROUP)) {
+				properties.putAll(this.getComputerProperties(device.getComputer()));
+			}
+			if (this.shouldDisplayGroup(Constant.AGGREGATED_CLIENT_GROUP)) {
+				properties.putAll(this.getClientProperties(device.getJabraClient()));
+			}
+			if (this.shouldDisplayGroup(Constant.AGGREGATED_SETTINGS_GROUP)) {
+				properties.putAll(this.getSettingsProperties(device));
+			}
 
-			List<AdvancedControllableProperty> controllableProperties = this.getSettingsControllers(device);
+			List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
+			if (this.configManagement) {
+				controllableProperties.addAll(this.getSettingsControllers(device));
+			}
 			Optional.of(controllableProperties).filter(List::isEmpty).ifPresent(l -> l.add(Constant.DUMMY_CONTROLLER));
 
 			aggregatedDevice.setProperties(properties);
@@ -336,6 +484,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	protected void internalDestroy() {
 		this.logger.info(Constant.DESTROY_INTERNAL_INFO + this);
 
+		this.displayPropertyGroups = null;
+		this.retrievalIntervals = null;
 		this.updatedSettingsCaches = null;
 		this.rooms = null;
 		this.unsupportedDevicesSettings = null;
@@ -392,23 +542,38 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private void setupData() throws FailedLoginException {
 		this.requestStateHandler.clearRequests();
-		this.devicesRooms.clear();
-		this.rooms.clear();
-		this.devices = this.fetchData(ApiConstant.GET_DEVICES_ENDPOINT, ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE);
-		if (CollectionUtils.isEmpty(this.devices)) {
+
+		//	Collect data for this.devices
+		IntervalSetting devicesInterval = this.getIntervalSettingByType(RetrievalType.DEVICES);
+		if (devicesInterval.isValid()) {
+			this.logger.info(String.format("Devices retrieval is available now. %s", devicesInterval.getNextAvailabilityInfo()));
+			this.devices = this.fetchData(
+					ApiConstant.GET_DEVICES_ENDPOINT + (this.showAllDevices ? Constant.EMPTY : ApiConstant.MEETING_ROOM_FILTER),
+					ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE
+			);
+		}
+		if (CollectionUtils.isEmpty(this.devices) || CollectionUtils.isEmpty(this.displayPropertyGroups)) {
 			return;
 		}
-		Set<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toSet());
-		for (String groupId : groupIDs) {
-			String url = ApiConstant.GET_ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
-			Room room = this.fetchData(url, Room.class);
-			if (room == null) {
-				continue;
-			}
+		//	Collect data for this.rooms and this.devicesRooms
+		IntervalSetting roomsInterval = this.getIntervalSettingByType(RetrievalType.ROOMS);
+		if (roomsInterval.isValid() && this.shouldDisplayGroup(Constant.ROOM_GROUP)) {
+			this.logger.info(String.format("Rooms retrieval is available now. %s", roomsInterval.getNextAvailabilityInfo()));
+			this.devicesRooms.clear();
+			this.rooms.clear();
+			Set<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toSet());
+			for (String groupId : groupIDs) {
+				String url = ApiConstant.GET_ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
+				Room room = this.fetchData(url, Room.class);
+				if (room == null) {
+					continue;
+				}
 
-			this.rooms.add(room);
-			this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
+				this.rooms.add(room);
+				this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
+			}
 		}
+		//	Update data for this.devices
 		this.devices.forEach(device -> {
 			Room room = this.rooms.stream().filter(r -> r.getGroupId().equals(device.getGroupId())).findFirst().orElse(null);
 			if (room == null) {
@@ -437,7 +602,11 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private void setupDataLoader() {
 		if (this.executorService == null) {
 			this.executorService = Executors.newFixedThreadPool(1);
-			this.dataLoader = new JabraCloudDataLoader(this, this.devices, this.supportedDevicesSettings, this.unsupportedDevicesSettings);
+			this.dataLoader = new JabraCloudDataLoader(
+					this,
+					this.devices, this.supportedDevicesSettings, this.unsupportedDevicesSettings,
+					this.getIntervalSettingByType(RetrievalType.DEVICE_SETTINGS)
+			);
 			this.executorService.submit(this.dataLoader);
 		}
 		this.dataLoader.setNextCollectionTime(System.currentTimeMillis());
@@ -673,7 +842,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
 		SettingProperty.getSupportedProperties().forEach(property -> {
 			String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, property.getName());
-			String[] options = BaseProperty.getNames(property.getType());
+			List<String> options = BaseProperty.getNames(property.getType());
 			OptionDetail settingDetailCache = updatedSettingsCache.get(property.getApiField());
 			String currentValue;
 			if (settingDetailCache == null) {
@@ -683,16 +852,14 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 				BaseSetting settingType = BaseSetting.getByValue(settingProperty.getType(), settingDetailCache.getSelected());
 				currentValue = settingType.getName();
 			}
-			AdvancedControllableProperty controllableProperty = this.generateControllableDropdown(propertyName, options, options, currentValue);
-
-			controllableProperties.add(controllableProperty);
+			controllableProperties.add(ControllablePropertyFactory.createDropdown(propertyName, options, currentValue));
 		});
 		if (!updatedSettingsCache.isEmpty()) {
-			controllableProperties.add(this.generateControllableButton(
+			controllableProperties.add(ControllablePropertyFactory.createButton(
 					String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.APPLY.getName()),
 					"Apply", "Applying", SETTING_UPDATE_TIME
 			));
-			controllableProperties.add(this.generateControllableButton(
+			controllableProperties.add(ControllablePropertyFactory.createButton(
 					String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.CANCEL.getName()),
 					"Cancel", "Canceling", 0L
 			));
@@ -768,41 +935,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	/**
-	 * Generates an {@link AdvancedControllableProperty} of type Dropdown with the specified name, labels, options, and value.
-	 *
-	 * @param dropdownName the name of the dropdown control property
-	 * @param labels the display labels for each dropdown option
-	 * @param options the actual option values associated with each label
-	 * @param value the initial selected value of the dropdown
-	 * @return an {@link AdvancedControllableProperty} configured as a dropdown control
-	 */
-	private AdvancedControllableProperty generateControllableDropdown(String dropdownName, String[] labels, String[] options, Object value) {
-		AdvancedControllableProperty.DropDown dropdown = new AdvancedControllableProperty.DropDown();
-		dropdown.setLabels(labels);
-		dropdown.setOptions(options);
-
-		return new AdvancedControllableProperty(dropdownName, new Date(), dropdown, value);
-	}
-
-	/**
-	 * Generates an {@link AdvancedControllableProperty} of type Button with the specified name, labels, and grace period.
-	 *
-	 * @param buttonName the name of the button control property
-	 * @param label the label to display on the button
-	 * @param labelPressed the label to display when the button is pressed
-	 * @param gracePeriod the time in milliseconds before the button can be pressed again
-	 * @return an {@link AdvancedControllableProperty} configured as a button control
-	 */
-	private AdvancedControllableProperty generateControllableButton(String buttonName, String label, String labelPressed, long gracePeriod) {
-		AdvancedControllableProperty.Button button = new Button();
-		button.setLabel(label);
-		button.setLabelPressed(labelPressed);
-		button.setGracePeriod(gracePeriod);
-
-		return new AdvancedControllableProperty(buttonName, new Date(), button, Constant.NOT_AVAILABLE);
-	}
-
-	/**
 	 * Retrieves the updated settings cache for a specific device.
 	 *
 	 * @param deviceId the unique identifier of the device
@@ -813,6 +945,24 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		return this.updatedSettingsCaches.stream()
 				.filter(settingsCache -> settingsCache.getDeviceId().equals(deviceId)).findFirst()
 				.map(SettingsRequest::getSettings).orElse(Collections.emptyMap());
+	}
+
+	/**
+	 * Returns the IntervalSetting for the given type, creating one if absent.
+	 * Guarantees a non-null entry so callers don't need null checks.
+	 */
+	private IntervalSetting getIntervalSettingByType(RetrievalType type) {
+		return retrievalIntervals.computeIfAbsent(type, t -> new IntervalSetting());
+	}
+
+	/**
+	 * Checks whether the specified property group is configured to be displayed.
+	 *
+	 * @param groupName the name of the property group to check
+	 * @return {@code true} if the group is configured to be displayed; {@code false} otherwise
+	 */
+	public boolean shouldDisplayGroup(String groupName) {
+		return CollectionUtils.isNotEmpty(this.displayPropertyGroups) && this.displayPropertyGroups.contains(groupName);
 	}
 
 	/**

@@ -19,7 +19,8 @@ public enum AggregatedGeneralProperty implements BaseProperty {
 	LAST_SEEN_AT("LastSeenAt(UTC)"),
 	PRODUCT_ID("ProductID"),
 	PRODUCT_NAME("ProductName"),
-	VARIANT_TYPE("VariantType");
+	VARIANT_TYPE("VariantType"),
+	IS_MEETING_DEVICE("IsMeetingDevice");
 
 	private final String name;
 
