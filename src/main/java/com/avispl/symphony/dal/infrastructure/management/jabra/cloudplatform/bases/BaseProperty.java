@@ -44,4 +44,17 @@ public interface BaseProperty {
 		E[] enums = enumClass.getEnumConstants();
 		return Arrays.stream(enums).filter(e -> e.getName().equals(name)).findFirst().orElse(null);
 	}
+
+	/**
+	 * Returns the enum constant of the specified enum class that matches the given name, ignoring case sensitivity.
+	 *
+	 * @param enumClass the enum class
+	 * @param name the property name
+	 * @param <E> the type of the enum
+	 * @return the enum constant matching the name, or {@code null} if not found
+	 */
+	static <E extends BaseProperty> E getByNameIgnoreCase(Class<E> enumClass, String name) {
+		E[] enums = enumClass.getEnumConstants();
+		return Arrays.stream(enums).filter(e -> e.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
+	}
 }

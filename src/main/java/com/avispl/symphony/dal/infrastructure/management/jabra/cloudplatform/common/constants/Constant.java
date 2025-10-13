@@ -41,9 +41,8 @@ public class Constant {
 
 	//	Values
 	public static final String NOT_AVAILABLE = "N/A";
-	public static final String MEETING_ROOM = "MeetingRoom";
 	public static final AdvancedControllableProperty DUMMY_CONTROLLER = ControllablePropertyFactory.createText(null, null);
-	public static final long DEFAULT_MS_TIMEOUT = Duration.ofSeconds(30).toMillis();
+	public static final long DEFAULT_INTERVAL_MS = Duration.ofSeconds(30).toMillis();
 
 	//	Info messages
 	public static final String INITIAL_INTERNAL_INFO = "Initialing internal state of instance: ";
@@ -59,6 +58,7 @@ public class Constant {
 
 	//	Fail messages
 	public static final String READ_PROPERTIES_FILE_FAILED = "Failed to load properties file: ";
+	public static final String SET_CLIENT_TYPE_FAILED = "Invalid clientTypeFilter value. Possible values are: %s.";
 	public static final String FETCH_DATA_FAILED = "Exception while fetching data. Endpoint: %s, ResponseClass: %s";
 	public static final String LOGIN_FAILED = "Failed to login, please check the credentials";
 	public static final String MAP_TO_UPTIME_FAILED = "Failed to mapToUptime with uptime: ";

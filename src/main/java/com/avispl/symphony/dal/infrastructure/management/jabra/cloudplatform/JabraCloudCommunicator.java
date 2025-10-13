@@ -33,6 +33,7 @@ import javax.security.auth.login.FailedLoginException;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 
+import com.avispl.symphony.api.common.error.InvalidArgumentException;
 import com.avispl.symphony.api.dal.control.Controller;
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
@@ -60,7 +61,8 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.Room;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.SettingDetail;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.RetrievalType;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.adapter.ClientTypeFilter;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.adapter.RetrievalType;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AggregatedGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ClientProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ComputerProperty;
@@ -160,7 +162,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private Set<SettingsRequest> updatedSettingsCaches;
 
 	/** Indicates whether all devices should be shown; defaults to false. */
-	private boolean showAllDevices;
+	private ClientTypeFilter clientTypeFilter;
 	/** Indicates whether control properties are visible; defaults to false. */
 	private boolean configManagement;
 	/** Interval control for retrieving data from APIs. */
@@ -184,28 +186,32 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.rooms = new ArrayList<>();
 		this.updatedSettingsCaches = new HashSet<>();
 
-		this.showAllDevices = false;
+		this.clientTypeFilter = ClientTypeFilter.MEETING_ROOM;
 		this.configManagement = false;
 		this.retrievalIntervals = new EnumMap<>(RetrievalType.class);
 		this.displayPropertyGroups = new HashSet<>();
 	}
 
 	/**
-	 * Retrieves {@link #showAllDevices}
+	 * Retrieves {@link #clientTypeFilter}
 	 *
-	 * @return value of {@link #showAllDevices}
+	 * @return value of {@link #clientTypeFilter}
 	 */
-	public boolean getShowAllDevices() {
-		return showAllDevices;
+	public String getClientTypeFilter() {
+		return clientTypeFilter.getName();
 	}
 
 	/**
-	 * Sets {@link #showAllDevices} value
+	 * Sets {@link #clientTypeFilter} value
 	 *
-	 * @param showAllDevices new value of {@link #showAllDevices}
+	 * @param clientTypeFilter new value of {@link #clientTypeFilter}
 	 */
-	public void setShowAllDevices(boolean showAllDevices) {
-		this.showAllDevices = showAllDevices;
+	public void setClientTypeFilter(String clientTypeFilter) {
+		if (StringUtils.isNullOrEmpty(clientTypeFilter, true)) {
+			return;
+		}
+		ClientTypeFilter clientType = BaseProperty.getByNameIgnoreCase(ClientTypeFilter.class, clientTypeFilter.trim());
+		this.clientTypeFilter = Optional.ofNullable(clientType).orElse(ClientTypeFilter.UNDEFINED);
 	}
 
 	/**
@@ -335,6 +341,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	public List<Statistics> getMultipleStatistics() throws Exception {
 		this.reentrantLock.lock();
 		try {
+			this.verifyAdapterProperties();
 			this.setupData();
 			Map<String, String> statistics = new HashMap<>(this.getGeneralProperties());
 			if (this.shouldDisplayGroup(Constant.ROOM_GROUP)) {
@@ -526,6 +533,18 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	/**
+	 * Verifies that the adapter properties has a valid value. <br/>
+	 * If the value is valid, this method throws an {@link InvalidArgumentException}.
+	 *
+	 * @throws InvalidArgumentException if the params is invalid
+	 */
+	private void verifyAdapterProperties() {
+		if (ClientTypeFilter.UNDEFINED.equals(this.clientTypeFilter)) {
+			throw new InvalidArgumentException(String.format(Constant.SET_CLIENT_TYPE_FAILED, ClientTypeFilter.getValues()));
+		}
+	}
+
+	/**
 	 * Initializes and sets up data for devices and rooms.
 	 * <p>
 	 * This method performs the following steps:
@@ -548,7 +567,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		if (devicesInterval.isValid()) {
 			this.logger.info(String.format("Devices retrieval is available now. %s", devicesInterval.getNextAvailabilityInfo()));
 			this.devices = this.fetchData(
-					ApiConstant.GET_DEVICES_ENDPOINT + (this.showAllDevices ? Constant.EMPTY : ApiConstant.MEETING_ROOM_FILTER),
+					String.format("%s%s%s", ApiConstant.GET_DEVICES_ENDPOINT, ApiConstant.CLIENT_TYPE_QUERY, this.clientTypeFilter.getValue()),
 					ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE
 			);
 		}
@@ -1018,10 +1037,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.requestStateHandler.resolveError(endpoint);
 
 			return mappedResponse;
-		} catch (FailedLoginException e) {
+		} catch (FailedLoginException | ResourceNotReachableException e) {
 			throw e;
-		} catch (ResourceNotReachableException e) {
-			throw new ResourceNotReachableException(e.getMessage(), e);
 		} catch (Exception e) {
 			this.requestStateHandler.pushError(endpoint, e);
 			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint, typeReferenceName), e);
