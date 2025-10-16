@@ -29,7 +29,7 @@ public class ApiConstant {
 	public static final String API_VERSION_HEADER = "api-version";
 	public static final String DEVICE_ID_PARAM = "{deviceId}";
 	public static final String GROUP_ID_PARAM = "{groupId}";
-	public static final String MEETING_ROOM_FILTER = "deviceClientType=" + Constant.MEETING_ROOM;
+	public static final String CLIENT_TYPE_QUERY = "deviceClientType=";
 	public static final String ITEMS_FIELD = "items";
 	public static final String SETTINGS_FIELD = "settings";
 

@@ -23,6 +23,7 @@ import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.adapter.ClientTypeFilter;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.SafetyCapacityNotification;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.SettingsRevertToDefault;
@@ -58,7 +59,7 @@ class JabraCloudCommunicatorTest {
 	@Test
 	void testGetMultipleStatistics() throws Exception {
 		this.jabraCloudCommunicator.setConfigManagement(true);
-		this.jabraCloudCommunicator.setShowAllDevices(true);
+		this.jabraCloudCommunicator.setClientTypeFilter(ClientTypeFilter.UNDEFINED.getName());
 		this.jabraCloudCommunicator.setDevicesInterval(Duration.ofSeconds(30).toMillis());
 		this.jabraCloudCommunicator.setRoomsInterval(Duration.ofSeconds(180).toMillis());
 		System.out.println("Start the first getMultipleStatistics()");
@@ -84,7 +85,7 @@ class JabraCloudCommunicatorTest {
 	@Test
 	void testDisplayPropertyGroups() throws Exception {
 		this.jabraCloudCommunicator.setConfigManagement(true);
-		this.jabraCloudCommunicator.setShowAllDevices(true);
+		this.jabraCloudCommunicator.setClientTypeFilter(ClientTypeFilter.ALL.getName());
 		String[] groups = new String[] { Constant.ROOM_GROUP, Constant.AGGREGATED_COMPUTER_GROUP };
 		this.jabraCloudCommunicator.setDisplayPropertyGroups(String.join(Constant.COMMA, groups));
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
@@ -108,6 +109,7 @@ class JabraCloudCommunicatorTest {
 
 	@Test
 	void testRetrieveMultipleStatistics() throws Exception {
+		this.jabraCloudCommunicator.setClientTypeFilter(ClientTypeFilter.UNDEFINED.getName());
 		this.jabraCloudCommunicator.setDeviceSettingsInterval(Duration.ofSeconds(30).toMillis());
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		System.out.println("Start the first retrieveMultipleStatistics()");

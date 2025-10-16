@@ -26,6 +26,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.rooms.Room;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.SettingDetail;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.adapter.ClientTypeFilter;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.AggregatedGeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ClientProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.ComputerProperty;
@@ -159,7 +160,7 @@ public class Util {
 				return mapToValue(device.getVariantType());
 			case IS_MEETING_DEVICE:
 				return Optional.ofNullable(device.getJabraClient())
-						.map(JabraClient::getClientType).map(type -> mapToValue(Constant.MEETING_ROOM.equalsIgnoreCase(type)))
+						.map(JabraClient::getClientType).map(type -> mapToValue(ClientTypeFilter.MEETING_ROOM.getValue().equalsIgnoreCase(type)))
 						.orElse(null);
 			default:
 				if (LOGGER.isWarnEnabled()) {
