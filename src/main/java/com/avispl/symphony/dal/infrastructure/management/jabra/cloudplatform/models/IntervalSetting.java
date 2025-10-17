@@ -16,12 +16,12 @@ public class IntervalSetting {
 	private long validRetrievalTimestamp;
 
 	public IntervalSetting() {
-		this.intervalMs = Constant.DEFAULT_MS_TIMEOUT;
+		this.intervalMs = Constant.DEFAULT_INTERVAL_MS;
 		this.validRetrievalTimestamp = System.currentTimeMillis();
 	}
 
 	public IntervalSetting(long intervalMs) {
-		this.intervalMs = Math.max(Constant.DEFAULT_MS_TIMEOUT, intervalMs);
+		this.intervalMs = Math.max(Constant.DEFAULT_INTERVAL_MS, intervalMs);
 		this.validRetrievalTimestamp = System.currentTimeMillis() + this.intervalMs;
 	}
 
