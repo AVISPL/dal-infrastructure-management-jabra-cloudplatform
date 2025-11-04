@@ -481,7 +481,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	protected HttpHeaders putExtraRequestHeaders(HttpMethod httpMethod, String uri, HttpHeaders headers) throws Exception {
 		this.authenticate();
 		headers.set(ApiConstant.API_KEY_HEADER, this.getPassword());
-		headers.set(ApiConstant.API_VERSION_HEADER, "2");
+		headers.set(ApiConstant.API_VERSION_HEADER, "4");
 		headers.setContentType(MediaType.APPLICATION_JSON);
 
 		return super.putExtraRequestHeaders(httpMethod, uri, headers);

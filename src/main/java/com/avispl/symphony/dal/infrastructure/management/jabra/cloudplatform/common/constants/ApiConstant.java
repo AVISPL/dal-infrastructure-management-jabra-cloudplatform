@@ -43,7 +43,7 @@ public class ApiConstant {
 
 	//	Endpoints
 	public static final String GET_DEVICES_ENDPOINT = "devices/api/devices?";
-	public static final String GET_DEVICE_SETTINGS_ENDPOINT = "assetmanagement/api/api-device/" + DEVICE_ID_PARAM + "/settings";
-	public static final String PATCH_DEVICE_SETTINGS_ENDPOINT = "assetmanagement/api/api-device/" + DEVICE_ID_PARAM + "/settings";
+	public static final String GET_DEVICE_SETTINGS_ENDPOINT = "devices/api/devices/" + DEVICE_ID_PARAM + "/settings";
+	public static final String PATCH_DEVICE_SETTINGS_ENDPOINT = "devices/api/devices/" + DEVICE_ID_PARAM + "/settings";
 	public static final String GET_ROOMS_ENDPOINT = "meetingroomassetmanagement/api/rooms/" + GROUP_ID_PARAM;
 }
