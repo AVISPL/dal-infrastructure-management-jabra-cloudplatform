@@ -146,7 +146,7 @@ public class JabraCloudDataLoader implements Runnable {
 		Map<String, Map<String, Map<String, Object>>> newUnsupportedDevicesSettings = new HashMap<>();
 		for (Device device : this.devices) {
 			try {
-				String url = ApiConstant.GET_DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, device.getId());
+				String url = ApiConstant.DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, device.getId());
 				if (Util.isSupportedDevice(device)) {
 					Settings deviceSettings = this.communicator.fetchData(url, ApiConstant.SETTINGS_FIELD, ApiConstant.SETTINGS_RES_TYPE);
 					newSupportedDevicesSettings.put(device.getId(), deviceSettings);
