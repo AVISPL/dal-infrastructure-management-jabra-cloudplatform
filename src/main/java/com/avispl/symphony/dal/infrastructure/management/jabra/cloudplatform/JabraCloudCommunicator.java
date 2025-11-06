@@ -132,15 +132,15 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private RequestStateHandler requestStateHandler;
 	/**
-	 * List of devices fetched from the {@link ApiConstant#GET_DEVICES_ENDPOINT}.
+	 * List of devices fetched from the {@link ApiConstant#DEVICES_ENDPOINT}.
 	 */
 	private List<Device> devices;
 	/**
-	 * Mapping of device IDs to their corresponding settings from the {@link ApiConstant#GET_DEVICE_SETTINGS_ENDPOINT}
+	 * Mapping of device IDs to their corresponding settings from the {@link ApiConstant#DEVICE_SETTINGS_ENDPOINT}
 	 */
 	private Map<String, Settings> supportedDevicesSettings;
 	/**
-	 * Maps unsupported device IDs to their raw settings structure from {@link ApiConstant#GET_DEVICE_SETTINGS_ENDPOINT}.
+	 * Maps unsupported device IDs to their raw settings structure from {@link ApiConstant#DEVICE_SETTINGS_ENDPOINT}.
 	 */
 	private Map<String, Map<String, Map<String, Object>>> unsupportedDevicesSettings;
 	/**
@@ -148,7 +148,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private List<DeviceOverview> devicesRooms;
 	/**
-	 * List of rooms retrieved from {@link ApiConstant#GET_ROOMS_ENDPOINT} based on current devices.
+	 * List of rooms retrieved from {@link ApiConstant#ROOMS_ENDPOINT} based on current devices.
 	 */
 	private List<Room> rooms;
 	/**
@@ -440,7 +440,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 					this.updatedSettingsCaches.add(settingsRequest);
 				}
 			} else if (SettingProperty.APPLY.getName().equals(propertyName)) {
-				String url = ApiConstant.PATCH_DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, controllableProperty.getDeviceId());
+				String url = ApiConstant.DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, controllableProperty.getDeviceId());
 				for (SettingsRequest settingsRequest : this.updatedSettingsCaches) {
 					if (settingsRequest.getDeviceId().equals(controllableProperty.getDeviceId())) {
 						this.performControlOperation(ControlMethod.PATCH, url, settingsRequest.getRequest());
@@ -567,7 +567,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		if (devicesInterval.isValid()) {
 			this.logger.info(String.format("Devices retrieval is available now. %s", devicesInterval.getNextAvailabilityInfo()));
 			this.devices = this.fetchData(
-					String.format("%s%s%s", ApiConstant.GET_DEVICES_ENDPOINT, ApiConstant.CLIENT_TYPE_QUERY, this.clientTypeFilter.getValue()),
+					String.format("%s%s%s", ApiConstant.DEVICES_ENDPOINT, ApiConstant.CLIENT_TYPE_QUERY, this.clientTypeFilter.getValue()),
 					ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE
 			);
 		}
@@ -582,7 +582,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.rooms.clear();
 			Set<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toSet());
 			for (String groupId : groupIDs) {
-				String url = ApiConstant.GET_ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
+				String url = ApiConstant.ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
 				Room room = this.fetchData(url, Room.class);
 				if (room == null) {
 					continue;
