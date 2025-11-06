@@ -41,9 +41,8 @@ public class ApiConstant {
 	public static final TypeReference<List<Device>> DEVICES_RES_TYPE = new TypeReference<List<Device>>() {
 	};
 
-	//	Endpoints
-	public static final String GET_DEVICES_ENDPOINT = "devices/api/devices?";
-	public static final String GET_DEVICE_SETTINGS_ENDPOINT = "devices/api/devices/" + DEVICE_ID_PARAM + "/settings";
-	public static final String PATCH_DEVICE_SETTINGS_ENDPOINT = "devices/api/devices/" + DEVICE_ID_PARAM + "/settings";
-	public static final String GET_ROOMS_ENDPOINT = "meetingroomassetmanagement/api/rooms/" + GROUP_ID_PARAM;
+	//	API endpoints
+	public static final String DEVICES_ENDPOINT = "devices/api/devices?";
+	public static final String DEVICE_SETTINGS_ENDPOINT = "devices/api/devices/" + DEVICE_ID_PARAM + "/settings";
+	public static final String ROOMS_ENDPOINT = "meetingroomassetmanagement/api/rooms/" + GROUP_ID_PARAM;
 }
