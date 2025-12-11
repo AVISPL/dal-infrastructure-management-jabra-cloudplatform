@@ -11,7 +11,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
-import org.springframework.web.client.HttpClientErrorException;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -31,8 +30,8 @@ public class JabraCloudRequestInterceptor implements ClientHttpRequestIntercepto
         if (response.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
             String retryAfterHeader = response.getHeaders().getFirst("Retry-After");
             long sleepMillis = 1_000L;
-            if (request.getMethod() == HttpMethod.PATCH) {
-                throw new HttpClientErrorException(HttpStatus.TOO_MANY_REQUESTS, String.format("Unable to execute the request. Please try again in %ss.", retryAfterHeader));
+            if (request.getMethod() == HttpMethod.PATCH || request.getMethod() == HttpMethod.POST) {
+                throw new RuntimeException(String.format("Unable to execute the request: Too many requests. Please try again in %ss.", retryAfterHeader));
             }
             if (retryAfterHeader != null) {
                 try {
