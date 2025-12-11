@@ -34,6 +34,7 @@ public class Constant {
 
 	//	Groups
 	public static final String GENERAL_GROUP = "General";
+	public static final String ALL_GROUP = "All";
 	public static final String ROOM_GROUP = "JabraRoom";
 	public static final String AGGREGATED_COMPUTER_GROUP = "Computer";
 	public static final String AGGREGATED_CLIENT_GROUP = "JabraClient";

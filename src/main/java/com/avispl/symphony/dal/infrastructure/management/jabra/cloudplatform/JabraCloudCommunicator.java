@@ -23,6 +23,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data.JabraCloudRequestInterceptor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -74,6 +75,10 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.typ
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.DynamicComposition;
 import com.avispl.symphony.dal.util.ControllablePropertyFactory;
 import com.avispl.symphony.dal.util.StringUtils;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.web.client.RestTemplate;
+
+import static java.util.concurrent.CompletableFuture.runAsync;
 
 /**
  * Main adapter class for Jabra Cloud Platform.
@@ -168,6 +173,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	/** Interval control for retrieving data from APIs. */
 	private EnumMap<RetrievalType, IntervalSetting> retrievalIntervals;
 	private Set<String> displayPropertyGroups;
+    private final JabraCloudRequestInterceptor jabraCloudRequestInterceptor = new JabraCloudRequestInterceptor();
 
 	public JabraCloudCommunicator() {
 		this.reentrantLock = new ReentrantLock();
@@ -481,7 +487,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	protected HttpHeaders putExtraRequestHeaders(HttpMethod httpMethod, String uri, HttpHeaders headers) throws Exception {
 		this.authenticate();
 		headers.set(ApiConstant.API_KEY_HEADER, this.getPassword());
-		headers.set(ApiConstant.API_VERSION_HEADER, "4");
+		headers.set(ApiConstant.API_VERSION_HEADER, "1");
 		headers.setContentType(MediaType.APPLICATION_JSON);
 
 		return super.putExtraRequestHeaders(httpMethod, uri, headers);
@@ -514,6 +520,17 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.lastMonitoringCycleDuration = 0L;
 		super.internalDestroy();
 	}
+
+
+    @Override
+    protected RestTemplate obtainRestTemplate() throws Exception {
+        RestTemplate restTemplate = super.obtainRestTemplate();
+        List<ClientHttpRequestInterceptor> interceptors = restTemplate.getInterceptors();
+        if (!interceptors.contains(jabraCloudRequestInterceptor))
+            interceptors.add(jabraCloudRequestInterceptor);
+
+        return restTemplate;
+    }
 
 	/**
 	 * Loads version properties and sets initial values used to create general properties
@@ -981,7 +998,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * @return {@code true} if the group is configured to be displayed; {@code false} otherwise
 	 */
 	public boolean shouldDisplayGroup(String groupName) {
-		return CollectionUtils.isNotEmpty(this.displayPropertyGroups) && this.displayPropertyGroups.contains(groupName);
+		return (CollectionUtils.isNotEmpty(this.displayPropertyGroups) && this.displayPropertyGroups.contains(groupName))
+                || this.displayPropertyGroups.contains("All");
 	}
 
 	/**
