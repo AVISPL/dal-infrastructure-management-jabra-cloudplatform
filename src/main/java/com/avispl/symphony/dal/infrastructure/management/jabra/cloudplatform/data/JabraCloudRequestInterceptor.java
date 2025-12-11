@@ -28,7 +28,7 @@ public class JabraCloudRequestInterceptor implements ClientHttpRequestIntercepto
     @Override
     public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
         ClientHttpResponse response = execution.execute(request, body);
-        if (response.getRawStatusCode() == 429) {
+        if (response.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
             String retryAfterHeader = response.getHeaders().getFirst("Retry-After");
             long sleepMillis = 1_000L;
             if (request.getMethod() == HttpMethod.PATCH) {
