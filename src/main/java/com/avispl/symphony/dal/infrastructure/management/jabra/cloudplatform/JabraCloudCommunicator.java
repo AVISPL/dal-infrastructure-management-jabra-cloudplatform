@@ -77,9 +77,6 @@ import com.avispl.symphony.dal.util.ControllablePropertyFactory;
 import com.avispl.symphony.dal.util.StringUtils;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.web.client.RestTemplate;
-
-import static java.util.concurrent.CompletableFuture.runAsync;
-
 /**
  * Main adapter class for Jabra Cloud Platform.
  * Responsible for generating monitoring, controllable, and aggregated devices.
