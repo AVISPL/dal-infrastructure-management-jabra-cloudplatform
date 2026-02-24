@@ -60,7 +60,7 @@ public class Constant {
 	//	Fail messages
 	public static final String READ_PROPERTIES_FILE_FAILED = "Failed to load properties file: ";
 	public static final String SET_CLIENT_TYPE_FAILED = "Invalid clientTypeFilter value. Possible values are: %s.";
-	public static final String FETCH_DATA_FAILED = "Exception while fetching data. Endpoint: %s, ResponseClass: %s";
+	public static final String FETCH_DATA_FAILED = "Unable to retrieve data from %s endpoint.";
 	public static final String LOGIN_FAILED = "Failed to login, please check the credentials";
 	public static final String MAP_TO_UPTIME_FAILED = "Failed to mapToUptime with uptime: ";
 	public static final String MAP_TO_UPTIME_MIN_FAILED = "Failed to mapToUptimeMin with uptime: ";
