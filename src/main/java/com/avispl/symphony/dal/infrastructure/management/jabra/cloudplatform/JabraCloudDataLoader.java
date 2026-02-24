@@ -76,7 +76,6 @@ public class JabraCloudDataLoader implements Runnable {
 	@Override
 	public void run() {
 		while (this.inProgress) {
-			long startCycle = System.currentTimeMillis();
 			Util.delayExecution(500);
 			if (!this.inProgress) {
 				if (this.logger.isDebugEnabled()) {
@@ -92,8 +91,8 @@ public class JabraCloudDataLoader implements Runnable {
 				continue;
 			}
 
-			long currentTimestamp = System.currentTimeMillis();
-			if (!this.cycleExecuted && this.nextCollectionTime < currentTimestamp) {
+			long startCycle = System.currentTimeMillis();
+			if (!this.cycleExecuted && this.nextCollectionTime < System.currentTimeMillis()) {
 				if (this.deviceSettingsInterval.isValid() && this.communicator.shouldDisplayGroup(Constant.AGGREGATED_SETTINGS_GROUP)) {
 					this.logger.info(String.format("Device settings retrieval is available now. %s", this.deviceSettingsInterval.getNextAvailabilityInfo()));
 					this.collectAggregatedDeviceData();
@@ -111,8 +110,13 @@ public class JabraCloudDataLoader implements Runnable {
 				Util.delayExecution(1000);
 			}
 			if (this.cycleExecuted) {
-				this.nextCollectionTime = System.currentTimeMillis() + POLLING_CYCLE_INTERVAL;
-				this.communicator.setLastMonitoringCycleDuration(System.currentTimeMillis() - startCycle);
+				try {
+					this.nextCollectionTime = System.currentTimeMillis() + (this.communicator.getMonitoringRate() * POLLING_CYCLE_INTERVAL);
+				} catch (NoSuchMethodError error) {
+					this.nextCollectionTime = System.currentTimeMillis() + POLLING_CYCLE_INTERVAL;
+					logger.error("Unsupported feature: getMonitoringRate isn't available on current Cloud Connector version.", error);
+				}
+				this.communicator.setLastMonitoringCycleDuration(Math.max((System.currentTimeMillis() - startCycle) / 1000, 1L));
 				this.cycleExecuted = false;
 			}
 		}

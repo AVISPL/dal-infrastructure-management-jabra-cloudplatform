@@ -23,10 +23,11 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data.JabraCloudRequestInterceptor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -52,6 +53,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.com
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant.ControlMethod;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data.JabraCloudRequestInterceptor;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.IntervalSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Computer;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
@@ -75,8 +77,6 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.typ
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.DynamicComposition;
 import com.avispl.symphony.dal.util.ControllablePropertyFactory;
 import com.avispl.symphony.dal.util.StringUtils;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
-import org.springframework.web.client.RestTemplate;
 /**
  * Main adapter class for Jabra Cloud Platform.
  * Responsible for generating monitoring, controllable, and aggregated devices.
@@ -401,7 +401,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			aggregatedDevices.add(aggregatedDevice);
 		});
 		this.localAggregatedDevices = aggregatedDevices;
-		this.versionProperties.setProperty(GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getProperty(), String.valueOf(this.lastMonitoringCycleDuration));
+		this.versionProperties.setProperty(GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getProperty(), String.valueOf(Math.max(this.lastMonitoringCycleDuration, 1L)));
 		this.versionProperties.setProperty(GeneralProperty.MONITORED_DEVICES_TOTAL.getProperty(), String.valueOf(this.localAggregatedDevices.size()));
 		return this.localAggregatedDevices;
 	}
@@ -538,11 +538,17 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private void loadProperties(Properties properties) {
 		try {
 			properties.load(this.getClass().getResourceAsStream("/version.properties"));
-			properties.setProperty(GeneralProperty.ADAPTER_UPTIME.getProperty(), String.valueOf(this.adapterInitializationTimestamp));
-			properties.setProperty(GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getProperty(), "0");
-			properties.setProperty(GeneralProperty.MONITORED_DEVICES_TOTAL.getProperty(), "0");
 		} catch (IOException e) {
 			this.logger.error(Constant.READ_PROPERTIES_FILE_FAILED + e.getMessage());
+			return;
+		}
+		properties.setProperty(GeneralProperty.ADAPTER_UPTIME.getProperty(), String.valueOf(this.adapterInitializationTimestamp));
+		properties.setProperty(GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getProperty(), String.valueOf(Math.max(this.lastMonitoringCycleDuration, 1L)));
+		properties.setProperty(GeneralProperty.MONITORED_DEVICES_TOTAL.getProperty(), String.valueOf(this.localAggregatedDevices.size()));
+		try {
+			properties.setProperty(GeneralProperty.MONITORED_CYCLE_INTERVAL.getProperty(), String.valueOf(this.getMonitoringRate()));
+		} catch (NoSuchMethodError error) {
+			logger.warn("Unsupported feature: getMonitoringRate isn't available on current Cloud Connector version.", error);
 		}
 	}
 
@@ -1019,10 +1025,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.requestStateHandler.resolveError(endpoint);
 
 			return response;
-		} catch (FailedLoginException e) {
+		} catch (FailedLoginException | ResourceNotReachableException e) {
 			throw e;
-		} catch (ResourceNotReachableException e) {
-			throw new ResourceNotReachableException(e.getMessage(), e);
 		} catch (Exception e) {
 			this.requestStateHandler.pushError(endpoint, e);
 			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint, responseClassName), e);
@@ -1056,7 +1060,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			throw e;
 		} catch (Exception e) {
 			this.requestStateHandler.pushError(endpoint, e);
-			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint, typeReferenceName), e);
+			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint), e);
 			return null;
 		}
 	}
