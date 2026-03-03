@@ -116,7 +116,7 @@ public class JabraCloudDataLoader implements Runnable {
 					this.nextCollectionTime = System.currentTimeMillis() + POLLING_CYCLE_INTERVAL;
 					logger.error("Unsupported feature: getMonitoringRate isn't available on current Cloud Connector version.", error);
 				}
-				this.communicator.setLastMonitoringCycleDuration(System.currentTimeMillis() - startCycle);
+				this.communicator.setLastMonitoringCycleDuration(Math.max(System.currentTimeMillis() - startCycle, 1L));
 				this.cycleExecuted = false;
 			}
 		}
