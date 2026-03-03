@@ -500,7 +500,7 @@ public class Util {
 			return Constant.NOT_AVAILABLE;
 		}
 		long duration = Long.parseLong(value);
-		return String.valueOf(Math.round(duration / 1000.0));
+		return String.valueOf(Math.max(duration / 1000, 1L));
 	}
 
 	/**
