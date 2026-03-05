@@ -545,7 +545,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		try {
 			this.versionProperties.setProperty(GeneralProperty.MONITORED_CYCLE_INTERVAL.getProperty(), String.valueOf(this.getMonitoringRate()));
 		} catch (NoSuchMethodError error) {
-			this.versionProperties.setProperty(GeneralProperty.MONITORED_CYCLE_INTERVAL.getProperty(), Constant.NOT_AVAILABLE);
 			logger.warn("Unsupported feature: getMonitoringRate isn't available on current Cloud Connector version.", error);
 		}
 	}
