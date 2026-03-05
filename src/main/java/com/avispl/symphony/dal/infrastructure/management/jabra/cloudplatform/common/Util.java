@@ -497,7 +497,7 @@ public class Util {
 	 */
 	private static String mapToMonitoringCycleDuration(String value) {
 		long duration = Long.parseLong(value);
-		return String.valueOf(Math.round(duration / 1000.0));
+		return String.valueOf(Math.max(duration / 1000, 1L));
 	}
 
 	/**
