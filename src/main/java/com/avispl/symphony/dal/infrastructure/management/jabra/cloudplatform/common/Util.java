@@ -496,9 +496,6 @@ public class Util {
 	 * @return duration in seconds as string, or {@link Constant#NOT_AVAILABLE} if input is null or empty
 	 */
 	private static String mapToMonitoringCycleDuration(String value) {
-		if (StringUtils.isNullOrEmpty(value)) {
-			return Constant.NOT_AVAILABLE;
-		}
 		long duration = Long.parseLong(value);
 		return String.valueOf(Math.round(duration / 1000.0));
 	}
