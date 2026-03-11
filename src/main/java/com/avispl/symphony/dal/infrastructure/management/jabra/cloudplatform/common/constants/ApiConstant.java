@@ -29,7 +29,8 @@ public class ApiConstant {
 	public static final String API_VERSION_HEADER = "api-version";
 	public static final String DEVICE_ID_PARAM = "{deviceId}";
 	public static final String GROUP_ID_PARAM = "{groupId}";
-	public static final String CLIENT_TYPE_QUERY = "deviceClientType=";
+	public static final String CLIENT_TYPE_QUERY = "deviceClientType";
+	public static final String PAGE_SIZE_QUERY = "pageSize";
 	public static final String ITEMS_FIELD = "items";
 	public static final String SETTINGS_FIELD = "settings";
 
@@ -42,7 +43,7 @@ public class ApiConstant {
 	};
 
 	//	API endpoints
-	public static final String DEVICES_ENDPOINT = "devices/api/devices?";
+	public static final String DEVICES_ENDPOINT = "devices/api/devices";
 	public static final String DEVICE_SETTINGS_ENDPOINT = "devices/api/devices/" + DEVICE_ID_PARAM + "/settings";
 	public static final String ROOMS_ENDPOINT = "meetingrooms/api/meetingrooms/" + GROUP_ID_PARAM;
 }

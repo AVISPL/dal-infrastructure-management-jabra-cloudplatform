@@ -4,6 +4,7 @@
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform;
 
 import java.io.IOException;
+import java.lang.reflect.ParameterizedType;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,10 +24,12 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data.JabraCloudRequestInterceptor;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -52,6 +55,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.com
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant.ControlMethod;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data.JabraCloudRequestInterceptor;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.IntervalSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Computer;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
@@ -75,8 +79,8 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.typ
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.DynamicComposition;
 import com.avispl.symphony.dal.util.ControllablePropertyFactory;
 import com.avispl.symphony.dal.util.StringUtils;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
+
 /**
  * Main adapter class for Jabra Cloud Platform.
  * Responsible for generating monitoring, controllable, and aggregated devices.
@@ -104,7 +108,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * Jackson object mapper for JSON serialization and deserialization.
 	 */
 	private final ObjectMapper objectMapper;
-
+	/**
+	 * Requested page for paginated API endpoints
+	 * */
+	private int apiPageSize = 100;
 	/**
 	 * Device adapter instantiation timestamp.
 	 */
@@ -193,6 +200,23 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.configManagement = false;
 		this.retrievalIntervals = new EnumMap<>(RetrievalType.class);
 		this.displayPropertyGroups = new HashSet<>();
+	}
+
+	/**
+	 * Retrieves {@link #apiPageSize}
+	 *
+	 * @return value of {@link #apiPageSize}
+	 */
+	public int getApiPageSize() {
+		return apiPageSize;
+	}
+	/**
+	 * Sets {@link #apiPageSize} value
+	 *
+	 * @param apiPageSize new value of {@link #apiPageSize}
+	 */
+	public void setApiPageSize(int apiPageSize) {
+		this.apiPageSize = apiPageSize;
 	}
 
 	/**
@@ -336,7 +360,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.logger.info(Constant.INITIAL_INTERNAL_INFO + this);
 		this.setTrustAllCertificates(true);
 		this.setAuthenticationScheme(AuthenticationScheme.None);
-		this.loadProperties(this.versionProperties);
+		this.loadProperties();
 		super.internalInit();
 	}
 
@@ -530,19 +554,22 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
     }
 
 	/**
-	 * Loads version properties and sets initial values used to create general properties
-	 * for the aggregator device.
-	 *
-	 * @param properties the properties to load and update
+	 * Loads version properties and sets initial values used to create general properties for the aggregator device.
 	 */
-	private void loadProperties(Properties properties) {
+	private void loadProperties() {
 		try {
-			properties.load(this.getClass().getResourceAsStream("/version.properties"));
-			properties.setProperty(GeneralProperty.ADAPTER_UPTIME.getProperty(), String.valueOf(this.adapterInitializationTimestamp));
-			properties.setProperty(GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getProperty(), "0");
-			properties.setProperty(GeneralProperty.MONITORED_DEVICES_TOTAL.getProperty(), "0");
+			this.versionProperties.load(this.getClass().getResourceAsStream("/version.properties"));
 		} catch (IOException e) {
 			this.logger.error(Constant.READ_PROPERTIES_FILE_FAILED + e.getMessage());
+			return;
+		}
+		this.versionProperties.setProperty(GeneralProperty.ADAPTER_UPTIME.getProperty(), String.valueOf(this.adapterInitializationTimestamp));
+		this.versionProperties.setProperty(GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getProperty(), String.valueOf(this.lastMonitoringCycleDuration));
+		this.versionProperties.setProperty(GeneralProperty.MONITORED_DEVICES_TOTAL.getProperty(), String.valueOf(this.localAggregatedDevices.size()));
+		try {
+			this.versionProperties.setProperty(GeneralProperty.MONITORED_CYCLE_INTERVAL.getProperty(), String.valueOf(this.getMonitoringRate()));
+		} catch (NoSuchMethodError error) {
+			logger.warn("Unsupported feature: getMonitoringRate isn't available on current Cloud Connector version.", error);
 		}
 	}
 
@@ -580,10 +607,12 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		IntervalSetting devicesInterval = this.getIntervalSettingByType(RetrievalType.DEVICES);
 		if (devicesInterval.isValid()) {
 			this.logger.info(String.format("Devices retrieval is available now. %s", devicesInterval.getNextAvailabilityInfo()));
-			this.devices = this.fetchData(
-					String.format("%s%s%s", ApiConstant.DEVICES_ENDPOINT, ApiConstant.CLIENT_TYPE_QUERY, this.clientTypeFilter.getValue()),
-					ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE
-			);
+			String devicesEndpoint = UriComponentsBuilder.fromPath(ApiConstant.DEVICES_ENDPOINT)
+					.queryParam(ApiConstant.CLIENT_TYPE_QUERY, this.clientTypeFilter.getValue())
+					.queryParam(ApiConstant.PAGE_SIZE_QUERY, this.apiPageSize)
+					.toUriString();
+
+			this.devices = this.fetchData(devicesEndpoint, ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE);
 		}
 		if (CollectionUtils.isEmpty(this.devices) || CollectionUtils.isEmpty(this.displayPropertyGroups)) {
 			return;
@@ -1019,10 +1048,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.requestStateHandler.resolveError(endpoint);
 
 			return response;
-		} catch (FailedLoginException e) {
+		} catch (FailedLoginException | ResourceNotReachableException e) {
 			throw e;
-		} catch (ResourceNotReachableException e) {
-			throw new ResourceNotReachableException(e.getMessage(), e);
 		} catch (Exception e) {
 			this.requestStateHandler.pushError(endpoint, e);
 			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint, responseClassName), e);
@@ -1044,21 +1071,71 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		String typeReferenceName = typeReference.getType().getTypeName();
 		try {
 			this.requestStateHandler.pushRequest(endpoint);
-			String response = super.doGet(endpoint);
-			T mappedResponse = this.objectMapper.readValue(this.objectMapper.readTree(response).get(indicatedField).toString(), typeReference);
-			if (Objects.isNull(response) && this.logger.isWarnEnabled()) {
-				this.logger.warn(String.format(Constant.FETCHED_DATA_NULL_WARNING, endpoint, typeReferenceName));
-			}
-			this.requestStateHandler.resolveError(endpoint);
 
-			return mappedResponse;
+			List<Object> aggregatedItems = null;
+			String currentEndpoint = endpoint;
+			boolean isList = typeReference.getType() instanceof ParameterizedType
+					&& List.class.isAssignableFrom(
+					(Class<?>) ((ParameterizedType) typeReference.getType()).getRawType());
+
+			while (true) {
+				JsonNode response = super.doGet(currentEndpoint, JsonNode.class);
+
+				if (Objects.isNull(response)) {
+					if (this.logger.isWarnEnabled()) {
+						this.logger.warn(String.format(Constant.FETCHED_DATA_NULL_WARNING, currentEndpoint, typeReferenceName));
+					}
+					break;
+				}
+
+				JsonNode dataNode = this.objectMapper.readTree(response.toString()).get(indicatedField);
+				T mappedResponse = this.objectMapper.readValue(dataNode.toString(), typeReference);
+
+				JsonNode tokenNode = response.at("/continuationToken");
+				String continuationToken = tokenNode.isMissingNode() || tokenNode.isNull()
+						? null
+						: tokenNode.asText();
+
+				if (continuationToken == null || !isList) {
+					if (isList && aggregatedItems != null) {
+						aggregatedItems.addAll((List<?>) mappedResponse);
+						this.requestStateHandler.resolveError(endpoint);
+						return (T) aggregatedItems;
+					}
+					this.requestStateHandler.resolveError(endpoint);
+					return mappedResponse;
+				}
+
+				if (aggregatedItems == null) {
+					aggregatedItems = new ArrayList<>((List<?>) mappedResponse);
+				} else {
+					aggregatedItems.addAll((List<?>) mappedResponse);
+				}
+
+				currentEndpoint = appendContinuationToken(endpoint, continuationToken);
+			}
+
+			this.requestStateHandler.resolveError(endpoint);
+			return isList && aggregatedItems != null ? (T) aggregatedItems : null;
 		} catch (FailedLoginException | ResourceNotReachableException e) {
 			throw e;
 		} catch (Exception e) {
 			this.requestStateHandler.pushError(endpoint, e);
-			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint, typeReferenceName), e);
+			this.logger.error(String.format(Constant.FETCH_DATA_FAILED, endpoint), e);
 			return null;
 		}
+	}
+
+	/**
+	 * Append continuationToken query string parameter to the origin endpoint
+	 * @param endpoint endpoint to attach continuationToken to
+	 * @param continuationToken token value to attach to the endpoint
+	 *
+	 * @return String value of an endpoint, with continuation token included
+	 * */
+	private String appendContinuationToken(String endpoint, String continuationToken) {
+		String separator = endpoint.contains("?") ? "&" : "?";
+		return endpoint + separator + "continuationToken=" + continuationToken;
 	}
 
 	/**

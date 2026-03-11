@@ -67,10 +67,6 @@ public class Util {
 		}
 
 		switch (property) {
-			case ADAPTER_BUILD_DATE:
-			case ADAPTER_VERSION:
-			case MONITORED_DEVICES_TOTAL:
-				return mapToValue(versionProperties.getProperty(property.getProperty()));
 			case ADAPTER_UPTIME:
 				return mapToUptime(versionProperties.getProperty(property.getProperty()));
 			case ADAPTER_UPTIME_MIN:
@@ -78,10 +74,7 @@ public class Util {
 			case LAST_MONITORING_CYCLE_DURATION:
 				return mapToMonitoringCycleDuration(versionProperties.getProperty(property.getProperty()));
 			default:
-				if (LOGGER.isWarnEnabled()) {
-					LOGGER.warn(String.format(Constant.UNSUPPORTED_MAP_PROPERTY_WARNING, "mapToGeneralProperty", property));
-				}
-				return null;
+				return mapToValue(versionProperties.getProperty(property.getProperty()));
 		}
 	}
 
@@ -434,10 +427,10 @@ public class Util {
 	 * <p>
 	 * The input timestamp represents the start time in milliseconds (typically from {@link System#currentTimeMillis()}).
 	 * The returned string represents the absolute duration in the format:
-	 * "X day(s) Y hour(s) Z minute(s) W second(s)", omitting any zero-value units except seconds.
+	 * "X d Y hr Z min W sec", omitting any zero-value units except seconds.
 	 *
 	 * @param uptime the start time in milliseconds as a string (e.g., "1717581000000")
-	 * @return a formatted duration string like "2 day(s) 3 hour(s) 15 minute(s) 42 second(s)", or null if parsing fails
+	 * @return a formatted duration string like "2 d 3 hr 15 min 42 sec", or null if parsing fails
 	 */
 	private static String mapToUptime(String uptime) {
 		try {
@@ -452,15 +445,17 @@ public class Util {
 			long days = uptimeSecond / 86400;
 			StringBuilder rs = new StringBuilder();
 			if (days > 0) {
-				rs.append(days).append(" day(s) ");
+				rs.append(days).append(" d ");
 			}
 			if (hours > 0) {
-				rs.append(hours).append(" hour(s) ");
+				rs.append(hours).append(" hr ");
 			}
 			if (minutes > 0) {
-				rs.append(minutes).append(" minute(s) ");
+				rs.append(minutes).append(" min ");
 			}
-			rs.append(seconds).append(" second(s)");
+			if (seconds > 0 || rs.length() == 0) {
+				rs.append(seconds).append(" sec");
+			}
 
 			return rs.toString().trim();
 		} catch (Exception e) {
@@ -496,7 +491,6 @@ public class Util {
 
 	/**
 	 * Converts a duration in milliseconds to seconds.
-	 * If >= 1000ms, returns integer seconds; otherwise, returns a decimal with 2 digits.
 	 *
 	 * @param value duration in milliseconds as string
 	 * @return duration in seconds as string, or {@link Constant#NOT_AVAILABLE} if input is null or empty
@@ -506,9 +500,7 @@ public class Util {
 			return Constant.NOT_AVAILABLE;
 		}
 		long duration = Long.parseLong(value);
-		return duration == 0 || duration >= 1000
-				? String.valueOf((int) (duration / 1000))
-				: String.format("%.2f", Math.round(duration / 1000.0 * 100) / 100.0);
+		return String.valueOf(Math.max(duration / 1000, 1L));
 	}
 
 	/**
