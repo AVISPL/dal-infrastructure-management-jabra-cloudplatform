@@ -398,7 +398,17 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.devices.forEach(device -> {
 			AggregatedDevice aggregatedDevice = new AggregatedDevice();
 			aggregatedDevice.setDeviceId(device.getId());
-			aggregatedDevice.setDeviceName(device.getProductName());
+			String deviceName = device.getName();
+			if (StringUtils.isNullOrEmpty(deviceName)) {
+				deviceName = device.getProductName();
+			}
+			aggregatedDevice.setDeviceName(deviceName);
+
+			aggregatedDevice.setDeviceModel(device.getProductName());
+			aggregatedDevice.setDeviceMake("Jabra");
+			aggregatedDevice.setType("AV Devices");
+			aggregatedDevice.setCategory(defineDeviceCategory(device.getProductName()));
+
 			aggregatedDevice.setDeviceOnline(device.getConnected());
 			aggregatedDevice.setSerialNumber(device.getSerialNumber());
 			aggregatedDevice.setTimestamp(System.currentTimeMillis());
@@ -1157,5 +1167,29 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			default:
 				break;
 		}
+	}
+
+	/**
+	 * Define device category by product name
+	 * The category names defined by Jabra may be qute specific, for instance
+	 * > Jabra PanaCast Control (Teams)
+	 * > Jabra PanaCast Control
+	 * So we're using a set of keywords here to match this to categories that Symphony has in its catalog.
+	 *
+	 * @param productName name of product provided by Jabra+ API
+	 * @return String value of Symphony category
+	 * */
+	private String defineDeviceCategory(String productName) {
+		if (StringUtils.isNullOrEmpty(productName)) {
+			logger.warn("Unable to define device category: product name is null");
+			return Constant.CATEGORY_GENERIC;
+		}
+		String name = productName.toLowerCase();
+		for(Map.Entry<String, String> entry: Constant.PRODUCT_KEYWORD_TO_CATEGORY_MATCH.entrySet()) {
+			if (name.contains(entry.getKey())) {
+				return entry.getValue();
+			}
+		}
+		return Constant.CATEGORY_GENERIC;
 	}
 }
