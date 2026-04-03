@@ -5,6 +5,7 @@ package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.co
 
 
 import java.time.Duration;
+import java.util.Map;
 
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
 import com.avispl.symphony.dal.util.ControllablePropertyFactory;
@@ -40,6 +41,12 @@ public class Constant {
 	public static final String AGGREGATED_CLIENT_GROUP = "JabraClient";
 	public static final String AGGREGATED_SETTINGS_GROUP = "Settings";
 
+	// Categories
+	public static final String CATEGORY_GENERIC = "Generic";
+	public static final String CATEGORY_TOUCH_SCREENS = "Touch Screens";
+	public static final String CATEGORY_CAMERA = "Camera";
+	public static final String CATEGORY_SPEAKER = "Speaker";
+
 	//	Values
 	public static final String NOT_AVAILABLE = "N/A";
 	public static final AdvancedControllableProperty DUMMY_CONTROLLER = ControllablePropertyFactory.createText(null, null);
@@ -66,4 +73,13 @@ public class Constant {
 	public static final String MAP_TO_UPTIME_MIN_FAILED = "Failed to mapToUptimeMin with uptime: ";
 	public static final String MAP_TO_READABLE_DATETIME_FAILED = "Failed to mapToUptimeMin with datetime: ";
 	public static final String REQUEST_APIS_FAILED = "Unable to process requested API sections: [%s], error reported: [%s]";
+
+	// Catalog category adjustments
+	public static final Map<String, String> PRODUCT_KEYWORD_TO_CATEGORY_MATCH = Map.ofEntries(
+			Map.entry("control", CATEGORY_TOUCH_SCREENS),
+			Map.entry("scheduler", CATEGORY_TOUCH_SCREENS),
+			Map.entry("panacast", CATEGORY_CAMERA),
+			Map.entry("speak", CATEGORY_CAMERA),
+			Map.entry("stereo", CATEGORY_SPEAKER)
+	);
 }
