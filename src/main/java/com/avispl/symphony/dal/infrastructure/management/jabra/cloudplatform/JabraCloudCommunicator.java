@@ -153,9 +153,13 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private Map<String, Map<String, Map<String, Object>>> unsupportedDevicesSettings;
 	/**
+	 * Room groupName:room map
+	 * */
+	private Map<String, Room> availableRooms = new HashMap<>();
+	/**
 	 * List of overview devices collected from all rooms.
 	 */
-	private List<DeviceOverview> devicesRooms;
+	private List<DeviceOverview> devicesRooms = new ArrayList<>();
 	/**
 	 * List of rooms retrieved from {@link ApiConstant#ROOMS_ENDPOINT} based on current devices.
 	 */
@@ -371,13 +375,15 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.verifyAdapterProperties();
 			this.setupData();
 			Map<String, String> statistics = new HashMap<>(this.getGeneralProperties());
+			List<AdvancedControllableProperty> controls = new ArrayList<>();
 			if (this.shouldDisplayGroup(Constant.ROOM_GROUP)) {
-				statistics.putAll(this.getRoomProperties());
+				this.getRoomProperties(statistics, controls);
 			}
 
 			ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 			extendedStatistics.setStatistics(statistics);
 			extendedStatistics.setDynamicStatistics(this.getDynamicStatistics(statistics));
+			extendedStatistics.setControllableProperties(controls);
 			this.localExtendedStatistics = extendedStatistics;
 		} finally {
 			this.reentrantLock.unlock();
@@ -409,7 +415,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			aggregatedDevice.setType("AV Devices");
 			aggregatedDevice.setCategory(defineDeviceCategory(device.getProductName()));
 
-			aggregatedDevice.setDeviceOnline(device.getConnected());
+			String deviceConnectionStatus = device.getDeviceConnectionStatus();
+			aggregatedDevice.setDeviceOnline(!"Offline".equals(deviceConnectionStatus));
 			aggregatedDevice.setSerialNumber(device.getSerialNumber());
 			aggregatedDevice.setTimestamp(System.currentTimeMillis());
 
@@ -456,6 +463,12 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			String groupName = groupParts[0];
 			String propertyName = controllerParts[1];
 
+			if (propertyName.endsWith("Reboot") && availableRooms != null) {
+				Room room = availableRooms.get(controllerParts[0]);
+				rebootRoom(room.getId());
+				return;
+			}
+
 			if (!groupName.equals(Constant.AGGREGATED_SETTINGS_GROUP)) {
 				this.logger.warn("Cannot define the controllable property: " + controllableProperty.getProperty());
 				return;
@@ -477,7 +490,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 					this.updatedSettingsCaches.add(settingsRequest);
 				}
 			} else if (SettingProperty.APPLY.getName().equals(propertyName)) {
-				String url = ApiConstant.DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, controllableProperty.getDeviceId());
+				String url = String.format(ApiConstant.DEVICE_SETTINGS_ENDPOINT, controllableProperty.getDeviceId());
 				for (SettingsRequest settingsRequest : this.updatedSettingsCaches) {
 					if (settingsRequest.getDeviceId().equals(controllableProperty.getDeviceId())) {
 						this.performControlOperation(ControlMethod.PATCH, url, settingsRequest.getRequest());
@@ -635,7 +648,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.rooms.clear();
 			Set<String> groupIDs = this.devices.stream().map(Device::getGroupId).filter(Objects::nonNull).collect(Collectors.toSet());
 			for (String groupId : groupIDs) {
-				String url = ApiConstant.ROOMS_ENDPOINT.replace(ApiConstant.GROUP_ID_PARAM, groupId);
+				String url = String.format(ApiConstant.ROOMS_ENDPOINT, groupId);
 				Room room = this.fetchData(url, Room.class);
 				if (room == null) {
 					continue;
@@ -707,23 +720,25 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 *
 	 * @return a map of grouped room property names and their corresponding values
 	 */
-	private Map<String, String> getRoomProperties() {
+	private void getRoomProperties(Map<String, String> statistics, List<AdvancedControllableProperty> controls) {
 		if (CollectionUtils.isEmpty(this.rooms)) {
 			if (this.logger.isWarnEnabled()) {
 				this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, Constant.ROOM_GROUP));
 			}
-			return Collections.emptyMap();
+			return;
 		}
-		Map<String, String> properties = new HashMap<>();
 		for (int i = 0; i < this.rooms.size(); i++) {
 			Room room = this.rooms.get(i);
 			String groupName = String.format(Constant.GROUP_FORMAT, Constant.ROOM_GROUP, i + 1);
-			properties.putAll(this.generateProperties(
+			statistics.putAll(this.generateProperties(
 					RoomProperty.values(), groupName, property -> Util.mapToRoomProperty(property, room)
 			));
-		}
+			availableRooms.put(groupName, room);
 
-		return properties;
+			String rebootControlName = groupName + "#Reboot";
+			statistics.put(rebootControlName, "N/A");
+			controls.add(ControllablePropertyFactory.createButton(rebootControlName, "Reboot", "Rebooting", 0L));
+		}
 	}
 
 	/**
@@ -1027,6 +1042,15 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		return retrievalIntervals.computeIfAbsent(type, t -> new IntervalSetting());
 	}
 
+	/**
+	 * Reboot jabra room
+	 * @param roomId id of the room to reboot
+	 * @throws Exception when any error occurs
+	 * */
+	private void rebootRoom(String roomId) throws Exception {
+		String requestUrl = String.format(ApiConstant.ROOMS_REBOOT_ENDPOINT, roomId);
+		doPost(requestUrl, null, JsonNode.class);
+	}
 	/**
 	 * Checks whether the specified property group is configured to be displayed.
 	 *
