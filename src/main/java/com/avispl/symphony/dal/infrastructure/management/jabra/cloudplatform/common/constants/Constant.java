@@ -79,7 +79,7 @@ public class Constant {
 			Map.entry("control", CATEGORY_TOUCH_SCREENS),
 			Map.entry("scheduler", CATEGORY_TOUCH_SCREENS),
 			Map.entry("panacast", CATEGORY_CAMERA),
-			Map.entry("speak", CATEGORY_CAMERA),
+			Map.entry("speak", CATEGORY_SPEAKER),
 			Map.entry("stereo", CATEGORY_SPEAKER)
 	);
 }
