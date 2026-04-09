@@ -74,6 +74,7 @@ public class Constant {
 	public static final String MAP_TO_READABLE_DATETIME_FAILED = "Failed to mapToUptimeMin with datetime: ";
 	public static final String REQUEST_APIS_FAILED = "Unable to process requested API sections: [%s], error reported: [%s]";
 
+	public static final String STATUS_DISCONNECTED = "Disconnected";
 	// Catalog category adjustments
 	public static final Map<String, String> PRODUCT_KEYWORD_TO_CATEGORY_MATCH = Map.ofEntries(
 			Map.entry("control", CATEGORY_TOUCH_SCREENS),

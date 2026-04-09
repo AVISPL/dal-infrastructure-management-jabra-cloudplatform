@@ -735,9 +735,11 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			));
 			availableRooms.put(groupName, room);
 
-			String rebootControlName = groupName + "#Reboot";
-			statistics.put(rebootControlName, "N/A");
-			controls.add(ControllablePropertyFactory.createButton(rebootControlName, "Reboot", "Rebooting", 0L));
+			if (!Constant.STATUS_DISCONNECTED.equalsIgnoreCase(room.getStatus())) {
+				String rebootControlName = groupName + "#Reboot";
+				statistics.put(rebootControlName, "N/A");
+				controls.add(ControllablePropertyFactory.createButton(rebootControlName, "Reboot", "Rebooting", 0L));
+			}
 		}
 	}
 
