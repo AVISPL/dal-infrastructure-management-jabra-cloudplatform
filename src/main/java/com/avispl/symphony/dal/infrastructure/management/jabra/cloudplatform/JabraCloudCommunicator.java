@@ -729,7 +729,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 		for (int i = 0; i < this.rooms.size(); i++) {
 			Room room = this.rooms.get(i);
-			String groupName = String.format(Constant.GROUP_FORMAT, Constant.ROOM_GROUP, i + 1);
+			String groupName = "Room_" + normalizeJabraRoomName(room.getName());
 			statistics.putAll(this.generateProperties(
 					RoomProperty.values(), groupName, property -> Util.mapToRoomProperty(property, room)
 			));
@@ -743,6 +743,16 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 	}
 
+	/**
+	 * Replace all special character in the string with _, also cutting down any consecutive entries to a single one.
+	 * Leading and tailing _ are also removed.
+	 *
+	 * @param name original room name
+	 * @return normalized room name
+	 * */
+	private String normalizeJabraRoomName(String name) {
+		return name.replaceAll("[^a-zA-Z0-9.]+", "_").replaceAll("^_|_$", "");
+	}
 	/**
 	 * Returns dynamic statistics for the given input.
 	 * <p>
