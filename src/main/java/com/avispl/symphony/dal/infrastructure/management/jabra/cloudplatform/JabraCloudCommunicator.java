@@ -18,6 +18,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
@@ -1055,13 +1056,19 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	/**
-	 * Reboot jabra room
+	 * Reboot Jabra room. Processed asynchronously so that timeout issues are not escalated
 	 * @param roomId id of the room to reboot
 	 * @throws Exception when any error occurs
 	 * */
 	private void rebootRoom(String roomId) throws Exception {
 		String requestUrl = String.format(ApiConstant.ROOMS_REBOOT_ENDPOINT, roomId);
-		doPost(requestUrl, null, JsonNode.class);
+		CompletableFuture.runAsync(() -> {
+            try {
+                doPost(requestUrl, null, JsonNode.class);
+            } catch (Exception e) {
+                logger.error("Unable to process room reboot request.", e);
+            }
+        });
 	}
 	/**
 	 * Checks whether the specified property group is configured to be displayed.
