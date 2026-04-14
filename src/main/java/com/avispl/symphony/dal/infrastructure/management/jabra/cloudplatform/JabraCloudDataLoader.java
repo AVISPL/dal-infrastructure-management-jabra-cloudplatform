@@ -8,6 +8,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Setting;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -17,6 +19,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.com
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.IntervalSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
+import org.springframework.core.ParameterizedTypeReference;
 
 /**
  * This class implements a data loader that periodically collects settings data
@@ -33,8 +36,7 @@ public class JabraCloudDataLoader implements Runnable {
 	private final Log logger = LogFactory.getLog(this.getClass());
 	private final JabraCloudCommunicator communicator;
 	private final List<Device> devices;
-	private final Map<String, Settings> supportedDevicesSettings;
-	private final Map<String, Map<String, Map<String, Object>>> unSupportedDevicesSettings;
+	private final Map<String, List<Setting>> devicesSettings;
 	private final IntervalSetting deviceSettingsInterval;
 
 	private volatile boolean inProgress;
@@ -46,13 +48,11 @@ public class JabraCloudDataLoader implements Runnable {
 	public JabraCloudDataLoader(
 			JabraCloudCommunicator communicator,
 			List<Device> devices,
-			Map<String, Settings> supportedDevicesSettings, Map<String, Map<String, Map<String, Object>>> unSupportedDevicesSettings,
-			IntervalSetting deviceSettingsInterval
+			Map<String, List<Setting>> devicesSettings, IntervalSetting deviceSettingsInterval
 	) {
 		this.communicator = communicator;
 		this.devices = devices;
-		this.supportedDevicesSettings = supportedDevicesSettings;
-		this.unSupportedDevicesSettings = unSupportedDevicesSettings;
+		this.devicesSettings = devicesSettings;
 		this.deviceSettingsInterval = deviceSettingsInterval;
 
 		this.inProgress = true;
@@ -147,25 +147,27 @@ public class JabraCloudDataLoader implements Runnable {
 	 */
 	private void collectAggregatedDeviceData() {
 		Map<String, Settings> newSupportedDevicesSettings = new HashMap<>();
+		Map<String, List<Setting>> settingsList = new HashMap<>();
 		Map<String, Map<String, Map<String, Object>>> newUnsupportedDevicesSettings = new HashMap<>();
 		for (Device device : this.devices) {
 			try {
 				String url = String.format(ApiConstant.DEVICE_SETTINGS_ENDPOINT, device.getId());
-				if (Util.isSupportedDevice(device)) {
-					Settings deviceSettings = this.communicator.fetchData(url, ApiConstant.SETTINGS_FIELD, ApiConstant.SETTINGS_RES_TYPE);
-					newSupportedDevicesSettings.put(device.getId(), deviceSettings);
-				} else {
-					Map<String, Map<String, Object>> deviceSettings = this.communicator.fetchData(url, ApiConstant.SETTINGS_FIELD, ApiConstant.COMMON_SETTINGS_RES_TYPE);
-					newUnsupportedDevicesSettings.put(device.getId(), deviceSettings);
-				}
+//				if (Util.isSupportedDevice(device)) {
+				List<Setting> settings = this.communicator.fetchData(url, new ParameterizedTypeReference<List<Setting>>(){});
+				settingsList.put(device.getId(), settings);
+//				newSupportedDevicesSettings.put(device.getId(), deviceSettings);
+//				} else {
+//					Map<String, Map<String, Object>> deviceSettings = this.communicator.fetchData(url, ApiConstant.SETTINGS_FIELD, ApiConstant.COMMON_SETTINGS_RES_TYPE);
+//					newUnsupportedDevicesSettings.put(device.getId(), deviceSettings);
+//				}
 			} catch (Exception e) {
 				this.logger.error(e.getMessage(), e);
 			}
 		}
-		this.supportedDevicesSettings.clear();
-		this.supportedDevicesSettings.putAll(newSupportedDevicesSettings);
-		this.unSupportedDevicesSettings.clear();
-		this.unSupportedDevicesSettings.putAll(newUnsupportedDevicesSettings);
+		this.devicesSettings.clear();
+		this.devicesSettings.putAll(settingsList);
+//		this.unSupportedDevicesSettings.clear();
+//		this.unSupportedDevicesSettings.putAll(newUnsupportedDevicesSettings);
 	}
 
 	/**
