@@ -1068,7 +1068,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	/**
-	 * Reboot jabra room
+	 * Reboot Jabra room. Processed asynchronously so that timeout issues are not escalated
 	 * @param roomId id of the room to reboot
 	 * @throws Exception when any error occurs
 	 * */
