@@ -33,11 +33,18 @@ public class SettingsRequest {
 		private boolean isLocked;
 		private String selected;
 		private boolean isOn;
+		private Object value;
 
-		public OptionDetail(String selected) {
+		public OptionDetail(String value) {
 			this.isLocked = false;
-			this.selected = selected;
+			this.selected = value;
 			this.isOn = selected.equals("1");
+
+			try {
+				this.value = Integer.parseInt(value);
+			} catch (NumberFormatException e) {
+				this.value = value;
+			}
 		}
 
 		/**
@@ -92,6 +99,24 @@ public class SettingsRequest {
 		 */
 		public void setIsOn(boolean on) {
 			isOn = on;
+		}
+
+		/**
+		 * Retrieves {@link #value}
+		 *
+		 * @return value of {@link #value}
+		 */
+		public Object getValue() {
+			return value;
+		}
+
+		/**
+		 * Sets {@link #value} value
+		 *
+		 * @param value new value of {@link #value}
+		 */
+		public void setValue(String value) {
+			this.value = value;
 		}
 	}
 
@@ -150,9 +175,9 @@ public class SettingsRequest {
 	}
 
 	/**
-	 * Retrieves the request body for {@link ApiConstant#PATCH_DEVICE_SETTINGS_ENDPOINT}
+	 * Retrieves the request body for {@link ApiConstant#DEVICE_SETTINGS_ENDPOINT}
 	 *
-	 * @return the request body(map) of {@link ApiConstant#PATCH_DEVICE_SETTINGS_ENDPOINT}
+	 * @return the request body(map) of {@link ApiConstant#DEVICE_SETTINGS_ENDPOINT}
 	 */
 	public Map<String, Map<String, OptionDetail>> getRequest() {
 		return Collections.singletonMap(ApiConstant.SETTINGS_FIELD, this.settings);
