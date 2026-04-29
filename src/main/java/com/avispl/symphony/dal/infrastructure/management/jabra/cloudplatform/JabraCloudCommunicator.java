@@ -474,7 +474,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			String[] groupParts = controllerParts[0].split(Constant.UNDERSCORE);
 			String groupName = groupParts[0];
 			String propertyName = controllerParts[1];
-			String deviceId = controllableProperty.getDeviceId();
 
 			if (propertyName.endsWith("Reboot") && availableRooms != null) {
 				Room room = availableRooms.get(controllerParts[0]);
