@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 
 public class JabraSettingsHttpMessageConverter implements GenericHttpMessageConverter<List<Setting>> {
-
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final List<MediaType> SUPPORTED_MEDIA_TYPES = List.of(
             MediaType.APPLICATION_JSON,

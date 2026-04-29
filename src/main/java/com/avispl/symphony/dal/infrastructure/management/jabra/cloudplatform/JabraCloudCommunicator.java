@@ -7,15 +7,16 @@ import java.io.IOException;
 import java.lang.reflect.ParameterizedType;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data.JabraSettingsHttpMessageConverter;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data.JabraSettingsValuespaceHttpMessageConverter;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.*;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.valuespace.SettingDescriptor;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.valuespace.SettingsValuespace;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
@@ -107,6 +108,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * Device adapter instantiation timestamp.
 	 */
 	private Long adapterInitializationTimestamp;
+
+	private Long lastControlActivationTimestamp = 0L;
 	/**
 	 * Duration (in milliseconds) of the last monitoring cycle.
 	 */
@@ -134,11 +137,17 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	/**
 	 * List of devices fetched from the {@link ApiConstant#DEVICES_ENDPOINT}.
 	 */
-	private List<Device> devices;
+	private volatile List<Device> devices;
 	/**
 	 * Mapping of device IDs to their corresponding settings from the {@link ApiConstant#DEVICE_SETTINGS_ENDPOINT}
 	 */
 	private Map<String, List<Setting>> devicesSettings;
+
+	/**
+	 * Feature model settings valuespace, containing all values and limits for supported models' settings
+	 * */
+	private Map<String, SettingsValuespace> featureModelSettingsValuespace;
+	private Map<String, String> deviceIdFeatureModelSettingsValuespace;
 	/**
 	 * Room groupName:room map
 	 * */
@@ -170,6 +179,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private Set<String> displayPropertyGroups;
     private final JabraCloudRequestInterceptor jabraCloudRequestInterceptor = new JabraCloudRequestInterceptor();
     private final JabraSettingsHttpMessageConverter jabraSettingsHttpMessageConterter = new JabraSettingsHttpMessageConverter();
+    private final JabraSettingsValuespaceHttpMessageConverter jabraSettingsValuespaceHttpMessageConverter = new JabraSettingsValuespaceHttpMessageConverter();
 
 	public JabraCloudCommunicator() {
 		this.reentrantLock = new ReentrantLock();
@@ -179,12 +189,14 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.objectMapper = new ObjectMapper();
 
 		this.localExtendedStatistics = new ExtendedStatistics();
-		this.localAggregatedDevices = new ArrayList<>();
+		this.localAggregatedDevices = new CopyOnWriteArrayList<>();
 		this.requestStateHandler = new RequestStateHandler();
-		this.devices = new ArrayList<>();
-		this.devicesRooms = new ArrayList<>();
-		this.devicesSettings = new HashMap<>();
-		this.rooms = new ArrayList<>();
+		this.devices = new CopyOnWriteArrayList<>();
+		this.devicesRooms = new CopyOnWriteArrayList<>();
+		this.devicesSettings = new ConcurrentHashMap<>();
+		this.featureModelSettingsValuespace = new ConcurrentHashMap<>();
+		this.deviceIdFeatureModelSettingsValuespace = new ConcurrentHashMap<>();
+		this.rooms = new CopyOnWriteArrayList<>();
 		this.updatedSettingsCaches = new HashSet<>();
 
 		this.clientTypeFilter = ClientTypeFilter.MEETING_ROOM;
@@ -357,6 +369,12 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 
 	@Override
 	public List<Statistics> getMultipleStatistics() throws Exception {
+		if (System.currentTimeMillis() - lastControlActivationTimestamp <= 5000) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("Device aggregator is in the cooldown state, emergency delivery update is skipped.");
+			}
+			return Collections.singletonList(this.localExtendedStatistics);
+		}
 		this.reentrantLock.lock();
 		try {
 			this.verifyAdapterProperties();
@@ -379,7 +397,15 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	}
 
 	@Override
-	public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
+	public List<AggregatedDevice> retrieveMultipleStatistics() {
+		if (System.currentTimeMillis() - lastControlActivationTimestamp <= 5000) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("Device aggregator is in the cooldown state, emergency delivery update is skipped.");
+			}
+
+			updateDeviceSettingsMode();
+			return this.localAggregatedDevices;
+		}
 		if (CollectionUtils.isEmpty(this.devices)) {
 			if (this.logger.isWarnEnabled()) {
 				this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, "device"));
@@ -428,6 +454,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.localAggregatedDevices = aggregatedDevices;
 		this.versionProperties.setProperty(GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getProperty(), String.valueOf(this.lastMonitoringCycleDuration));
 		this.versionProperties.setProperty(GeneralProperty.MONITORED_DEVICES_TOTAL.getProperty(), String.valueOf(this.localAggregatedDevices.size()));
+
+		updateDeviceSettingsMode();
 		return this.localAggregatedDevices;
 	}
 
@@ -446,6 +474,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			String[] groupParts = controllerParts[0].split(Constant.UNDERSCORE);
 			String groupName = groupParts[0];
 			String propertyName = controllerParts[1];
+			String deviceId = controllableProperty.getDeviceId();
 
 			if (propertyName.endsWith("Reboot") && availableRooms != null) {
 				Room room = availableRooms.get(controllerParts[0]);
@@ -457,23 +486,30 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 				this.logger.warn("Cannot define the controllable property: " + controllableProperty.getProperty());
 				return;
 			}
-			if (SettingProperty.isSupportedProperty(propertyName)) {
-				SettingProperty settingProperty = BaseProperty.getByName(SettingProperty.class, propertyName);
-				String settingValue = BaseProperty.getByName(settingProperty.getType(), controllableProperty.getValue().toString()).getValue();
+			boolean applySettings = SettingProperty.APPLY.getName().equals(propertyName);
+			boolean cancelSettings = SettingProperty.CANCEL.getName().equals(propertyName);
+
+			if (!applySettings && !cancelSettings) {
+				String propertyApiField = denormalizeSettingPropertyName(propertyName);
+				String settingValue = controllableProperty.getValue().toString();
+
 				Optional<SettingsRequest> settingsCache = this.updatedSettingsCaches.stream()
 						.filter(c -> c.getDeviceId().equals(controllableProperty.getDeviceId())).findFirst();
+
 				if (settingsCache.isPresent()) {
-					settingsCache.get().getSettings().put(settingProperty.getApiField(), new OptionDetail(settingValue));
+					settingsCache.get().getSettings().put(propertyName, new OptionDetail(settingValue));
 				} else {
 					SettingsRequest settingsRequest = new SettingsRequest(
 							controllableProperty.getDeviceId(),
 							System.currentTimeMillis() + UPDATED_SETTINGS_CACHE_EXPIRY_TIME,
-							Collections.singletonMap(settingProperty.getApiField(), new OptionDetail(settingValue))
+							Collections.singletonMap(propertyApiField, new OptionDetail(settingValue))
 					);
 
 					this.updatedSettingsCaches.add(settingsRequest);
 				}
-			} else if (SettingProperty.APPLY.getName().equals(propertyName)) {
+				return;
+			}
+			if (applySettings) {
 				String url = String.format(ApiConstant.DEVICE_SETTINGS_ENDPOINT, controllableProperty.getDeviceId());
 				for (SettingsRequest settingsRequest : this.updatedSettingsCaches) {
 					if (settingsRequest.getDeviceId().equals(controllableProperty.getDeviceId())) {
@@ -483,11 +519,12 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 						break;
 					}
 				}
-			} else if (SettingProperty.CANCEL.getName().equals(propertyName)) {
+			} else {
 				this.updatedSettingsCaches.removeIf(cache -> cache.getDeviceId().equals(controllableProperty.getDeviceId()));
 			}
 		} finally {
 			this.reentrantLock.unlock();
+			this.lastControlActivationTimestamp = System.currentTimeMillis();
 		}
 	}
 
@@ -530,6 +567,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.updatedSettingsCaches = null;
 		this.rooms = null;
 		this.devicesSettings = null;
+		this.featureModelSettingsValuespace = null;
+		this.deviceIdFeatureModelSettingsValuespace = null;
 		this.devicesRooms = null;
 		this.devices = null;
 		this.requestStateHandler = null;
@@ -558,6 +597,9 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
             interceptors.add(jabraCloudRequestInterceptor);
 		if (!converters.contains(jabraSettingsHttpMessageConterter)) {
 			converters.add(0, jabraSettingsHttpMessageConterter);
+		}
+		if (!converters.contains(jabraSettingsValuespaceHttpMessageConverter)) {
+			converters.add(1, jabraSettingsValuespaceHttpMessageConverter);
 		}
         return restTemplate;
     }
@@ -621,7 +663,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 					.queryParam(ApiConstant.PAGE_SIZE_QUERY, this.apiPageSize)
 					.toUriString();
 
-			this.devices = this.fetchData(devicesEndpoint, ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE);
+			List<Device> fetched = this.fetchData(devicesEndpoint, ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE);
+			if (fetched != null) {
+				this.devices = new CopyOnWriteArrayList<>(fetched);
+			}
 		}
 		if (CollectionUtils.isEmpty(this.devices) || CollectionUtils.isEmpty(this.displayPropertyGroups)) {
 			return;
@@ -675,7 +720,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.executorService = Executors.newFixedThreadPool(1);
 			this.dataLoader = new JabraCloudDataLoader(
 					this,
-					this.devices, this.devicesSettings, this.getIntervalSettingByType(RetrievalType.DEVICE_SETTINGS)
+					this.devices, this.devicesSettings, this.featureModelSettingsValuespace, this.deviceIdFeatureModelSettingsValuespace, this.getIntervalSettingByType(RetrievalType.DEVICE_SETTINGS)
 			);
 			this.executorService.submit(this.dataLoader);
 		}
@@ -844,7 +889,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * </p>
 	 *
 	 * @param device the target device
-	 * @return a map of property names and their values, or an empty map if unavailable
+	 * @param properties device properties
+	 * @param controllableProperties device controls
 	 */
 	private void processSettingsProperties(Device device, Map<String, String> properties, List<AdvancedControllableProperty> controllableProperties) {
 		if (device == null) {
@@ -853,13 +899,22 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			}
 			return;
 		}
-//		if (!Util.isSupportedDevice(device)) {
-//			return Util.mapToSettingsProperties(this.unsupportedDevicesSettings.get(device.getId()));
-//		}
-		List<Setting> settings = this.devicesSettings.get(device.getId());
+		String deviceId = device.getId();
+		List<Setting> settings = this.devicesSettings.get(deviceId);
 		if (settings == null || settings.isEmpty()) {
 			return;
 		}
+
+		String featureModelId = deviceIdFeatureModelSettingsValuespace.get(deviceId);
+		if (featureModelId == null) {
+			return;
+		}
+		SettingsValuespace settingsValuespace = featureModelSettingsValuespace.get(featureModelId);
+		if (settingsValuespace == null) {
+			return;
+		}
+		Map<String, SettingDescriptor> settingsDescriptors = settingsValuespace.descriptors();
+
 		for(Setting setting: settings) {
 			Map.Entry<String, String> entry = generateSettingsEntry(setting);
 			properties.put(entry.getKey(), entry.getValue());
@@ -867,29 +922,37 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 				continue;
 			}
 
+			SettingDescriptor settingDescriptor;
 			switch (setting.getType()) {
 				case TOGGLE:
 					addDeviceControl(controllableProperties, createSwitch(entry.getKey(), (boolean)setting.getValue() ? 1 : 0));
 					break;
 				case DROPDOWN:
-					List<DropdownSettingEntry> entries = dropdownOptions.get(setting.getName());
-					Set<String> keys = new LinkedHashSet<>();
-					Set<String> values = new LinkedHashSet<>();
-					String settingValue = setting.getValue().toString();
-					if (entries != null && !entries.isEmpty()) {
-						keys = entries.stream().map(DropdownSettingEntry::getName).collect(Collectors.toCollection(LinkedHashSet::new));
-						values = entries.stream().map(DropdownSettingEntry::getValue).collect(Collectors.toCollection(LinkedHashSet::new));
-					} else {
-						keys.add(settingValue);
-						values.add(settingValue);
+                    String settingValue = setting.getValue().toString();
+                    settingDescriptor = settingsDescriptors.get(setting.getName());
+                    if (settingDescriptor == null) {
+						if (logger.isWarnEnabled()) {
+							logger.warn(String.format("Unable to process %s property values: missing settings descriptor.", setting.getName()));
+						}
+						break;
 					}
+					SettingDescriptor.DropdownValuespace dropdownValuespace = (SettingDescriptor.DropdownValuespace) settingDescriptor.valuespace();
+
+                    Set<String> keys = new LinkedHashSet<>(dropdownValuespace.options());
+                    Set<String> values = new LinkedHashSet<>(dropdownValuespace.options());
 					addDeviceControl(controllableProperties, createDropdown(entry.getKey(), keys, values, settingValue));
 					break;
 				case TEXT:
 					addDeviceControl(controllableProperties, createText(entry.getKey(), setting.getValue().toString()));
 					break;
 				case NUMERIC:
-					addDeviceControl(controllableProperties, createNumeric(entry.getKey(), setting.getValue().toString()));
+					settingDescriptor = settingsDescriptors.get(setting.getName());
+					if (settingDescriptor == null) {
+						addDeviceControl(controllableProperties, createNumeric(entry.getKey(), setting.getValue().toString()));
+					} else {
+						SettingDescriptor.NumberValuespace numberValuespace = (SettingDescriptor.NumberValuespace) settingDescriptor.valuespace();
+						addDeviceControl(controllableProperties, createSlider(entry.getKey(), (float) numberValuespace.min(), (float) numberValuespace.max(), Float.valueOf(setting.getValue().toString())));
+					}
 					break;
 				default:
 					logger.warn(String.format("Unable to process device setting: no setting of type %s is supported.", setting.getType()));
@@ -898,8 +961,42 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 	}
 
+	/**
+	 * Check if the device has any unapplied settings and show Apply/Cancel buttons
+	 * This method operates with cached version of aggregated devices - {@link #localAggregatedDevices}
+	 *
+	 * @since 1.1.1
+	 * */
+	private void updateDeviceSettingsMode(){
+		for (AggregatedDevice device : this.localAggregatedDevices) {
+			Map<String, OptionDetail> pendingChanges = this.getUpdatedSettingsCacheByDeviceId(device.getDeviceId());
+			if (pendingChanges.isEmpty()) {
+				continue;
+			}
+			Map<String, String> properties = device.getProperties();
+			List<AdvancedControllableProperty> controls = device.getControllableProperties();
 
-	public static AdvancedControllableProperty createDropdown(String name, Set<String> labels, Set<String> options, String initialValue) {
+			String applyKey = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.APPLY.getName());
+			properties.put(applyKey, "N/A");
+			addDeviceControl(controls, createButton(applyKey, "Apply", "Applying", SETTING_UPDATE_TIME));
+
+			String cancelKey = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, SettingProperty.CANCEL.getName());
+			properties.put(cancelKey, "N/A");
+			addDeviceControl(controls, createButton(cancelKey, "Cancel", "Canceling", 0L));
+		}
+	}
+
+	/**
+	 * Create dropdown controllable property
+	 *
+	 * @param name of the controllable property
+	 * @param labels set of labels (for UI)
+	 * @param options set of options (for API)
+	 * @param initialValue value of the control
+	 *
+	 * @return built instance of {@link AdvancedControllableProperty}
+	 * */
+	private AdvancedControllableProperty createDropdown(String name, Set<String> labels, Set<String> options, String initialValue) {
 		AdvancedControllableProperty.DropDown dropDown = new AdvancedControllableProperty.DropDown();
 		dropDown.setOptions(options.toArray(new String[0]));
 		dropDown.setLabels(labels.toArray(new String[0]));
@@ -930,11 +1027,26 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		));
 	}
 
+	/**
+	 * Generate Settings properties entry based on {@link Setting}
+	 *
+	 * @param setting instance to create property name for
+	 * @return {@link Map.Entry} of a given setting
+	 *
+	 * @since 1.1.1
+	 * */
 	private Map.Entry<String, String> generateSettingsEntry(Setting setting) {
 		String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, normalizeSettingPropertyName(setting.getName()));
 		return Map.entry(propertyName, setting.getValue().toString());
 	}
 
+	/**
+	 * Normalize Setting property name, from camelCase to PascalCase (according to SY naming standards)
+	 *
+	 * @param name original string
+	 * @return modified {@link String}
+	 * @since 1.1.1
+	 * */
 	private String normalizeSettingPropertyName(String name) {
 		if (name == null || name.isEmpty()) {
 			return name;
@@ -942,10 +1054,32 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		return Character.toUpperCase(name.charAt(0)) + name.substring(1);
 	}
 
+	/**
+	 * Denormalize Setting property name, from PascalCase to camelCase (according to Jabra+ naming standards)
+	 *
+	 * @param name Symphony-friendly string format
+	 * @return modified {@link String}
+	 * @since 1.1.1
+	 * */
+	private String denormalizeSettingPropertyName(String name) {
+		if (name == null || name.isEmpty()) {
+			return name;
+		}
+		return Character.toLowerCase(name.charAt(0)) + name.substring(1);
+	}
+
+	/**
+	 * Add controllable property to a device to preserve uniqueness in a centralized way
+	 *
+	 * @param controls to add controllable property to
+	 * @param control to add to controllable properties list
+	 * @since 1.1.1
+	 * */
 	private void addDeviceControl(List<AdvancedControllableProperty> controls, AdvancedControllableProperty control) {
 		Optional<AdvancedControllableProperty> availableControl = controls.stream().filter(controllableProperty -> controllableProperty.getName().equalsIgnoreCase(control.getName())).findAny();
 		availableControl.ifPresentOrElse(controllableProperty -> controllableProperty.setValue(control.getValue()), () -> controls.add(control));
 	}
+
 	/**
 	 * Generates a settings controllable property map for a given device ID.
 	 * <p>
@@ -998,13 +1132,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * */
 	private void rebootRoom(String roomId) throws Exception {
 		String requestUrl = String.format(ApiConstant.ROOMS_REBOOT_ENDPOINT, roomId);
-		CompletableFuture.runAsync(() -> {
-            try {
-                doPost(requestUrl, null, JsonNode.class);
-            } catch (Exception e) {
-                logger.error("Unable to process room reboot request.", e);
-            }
-        });
+		doPost(requestUrl, null, JsonNode.class);
 	}
 	/**
 	 * Checks whether the specified property group is configured to be displayed.

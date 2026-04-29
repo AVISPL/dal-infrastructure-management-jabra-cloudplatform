@@ -32,10 +32,12 @@ public class SettingsRequest {
 	public static class OptionDetail {
 		private boolean isLocked;
 		private String selected;
+		private boolean isOn;
 
 		public OptionDetail(String selected) {
 			this.isLocked = false;
 			this.selected = selected;
+			this.isOn = selected.equals("1");
 		}
 
 		/**
@@ -72,6 +74,24 @@ public class SettingsRequest {
 		 */
 		public void setSelected(String selected) {
 			this.selected = selected;
+		}
+
+		/**
+		 * Retrieves {@link #isOn}
+		 *
+		 * @return value of {@link #isOn}
+		 */
+		public boolean getIsOn() {
+			return isOn;
+		}
+
+		/**
+		 * Sets {@link #isOn} value
+		 *
+		 * @param isOn new value of {@link #isOn}
+		 */
+		public void setIsOn(boolean on) {
+			isOn = on;
 		}
 	}
 
