@@ -31,11 +31,42 @@ public class SettingsRequest {
 	 */
 	public static class OptionDetail {
 		private boolean isLocked;
-		private String selected;
+		private String value;
 
-		public OptionDetail(String selected) {
+		public OptionDetail(String value) {
 			this.isLocked = false;
-			this.selected = selected;
+			this.value = value;
+		}
+
+		/**
+		 * Retrieves {@link #value}
+		 *
+		 * @return boolean value of {@link #value}
+		 */
+		public boolean getIsOn() {
+			return "1".equals(value);
+		}
+
+		/**
+		 * Retrieves {@link #value}
+		 *
+		 * @return value of {@link #value}
+		 */
+		public String getSelected() {
+			return value;
+		}
+
+		/**
+		 * Retrieves {@link #value}
+		 *
+		 * @return int/string object value of {@link #value}
+		 */
+		public Object getValue() {
+			try {
+				return Integer.parseInt(this.value);
+			} catch (NumberFormatException e) {
+				return value;
+			}
 		}
 
 		/**
@@ -43,35 +74,8 @@ public class SettingsRequest {
 		 *
 		 * @return value of {@link #isLocked}
 		 */
-		public boolean isLocked() {
+		public boolean getIsLocked() {
 			return isLocked;
-		}
-
-		/**
-		 * Sets {@link #isLocked} value
-		 *
-		 * @param locked new value of {@link #isLocked}
-		 */
-		public void setLocked(boolean locked) {
-			isLocked = locked;
-		}
-
-		/**
-		 * Retrieves {@link #selected}
-		 *
-		 * @return value of {@link #selected}
-		 */
-		public String getSelected() {
-			return selected;
-		}
-
-		/**
-		 * Sets {@link #selected} value
-		 *
-		 * @param selected new value of {@link #selected}
-		 */
-		public void setSelected(String selected) {
-			this.selected = selected;
 		}
 	}
 
@@ -130,9 +134,9 @@ public class SettingsRequest {
 	}
 
 	/**
-	 * Retrieves the request body for {@link ApiConstant#PATCH_DEVICE_SETTINGS_ENDPOINT}
+	 * Retrieves the request body for {@link ApiConstant#DEVICE_SETTINGS_ENDPOINT}
 	 *
-	 * @return the request body(map) of {@link ApiConstant#PATCH_DEVICE_SETTINGS_ENDPOINT}
+	 * @return the request body(map) of {@link ApiConstant#DEVICE_SETTINGS_ENDPOINT}
 	 */
 	public Map<String, Map<String, OptionDetail>> getRequest() {
 		return Collections.singletonMap(ApiConstant.SETTINGS_FIELD, this.settings);

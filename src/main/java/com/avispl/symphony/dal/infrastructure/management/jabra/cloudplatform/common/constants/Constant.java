@@ -5,10 +5,15 @@ package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.co
 
 
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.DropdownSettingEntry;
 import com.avispl.symphony.dal.util.ControllablePropertyFactory;
+
+import static com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.DropdownSettingEntry.*;
 
 /**
  * Utility class that defines constant values used across the application.
@@ -74,6 +79,7 @@ public class Constant {
 	public static final String MAP_TO_READABLE_DATETIME_FAILED = "Failed to mapToUptimeMin with datetime: ";
 	public static final String REQUEST_APIS_FAILED = "Unable to process requested API sections: [%s], error reported: [%s]";
 
+	// Statuses
 	public static final String STATUS_DISCONNECTED = "Disconnected";
 	// Catalog category adjustments
 	public static final Map<String, String> PRODUCT_KEYWORD_TO_CATEGORY_MATCH = Map.ofEntries(
@@ -82,5 +88,15 @@ public class Constant {
 			Map.entry("panacast", CATEGORY_CAMERA),
 			Map.entry("speak", CATEGORY_SPEAKER),
 			Map.entry("stereo", CATEGORY_SPEAKER)
+	);
+
+	public static final Map<String, List<DropdownSettingEntry>> dropdownOptions = Map.ofEntries(
+		Map.entry("automaticZoomMode", Arrays.asList(FULL_SCREEN, INTELLIGENT_ZOOM, ACTIVE_SPEAKER)),
+		Map.entry("automaticZoomSpeed", Arrays.asList(SLOWEST, SLOWER, MEDIUM, FASTER, FASTEST)),
+		Map.entry("dynamicComposition", Arrays.asList(OFF, MODE_1, MODE_2)),
+		Map.entry("fieldOfView", Arrays.asList(D90, D120, D140, D180)),
+		Map.entry("safetyCapacityNotification", Arrays.asList(ALWAYS, WHEN_VIDEOS_IS_ENABLE)),
+		Map.entry("settingsRevertToDefault", Arrays.asList(EN_CALL, PC_UNPLUG)),
+		Map.entry("videoStiching", Arrays.asList(BLEND, HYBRID))
 	);
 }
