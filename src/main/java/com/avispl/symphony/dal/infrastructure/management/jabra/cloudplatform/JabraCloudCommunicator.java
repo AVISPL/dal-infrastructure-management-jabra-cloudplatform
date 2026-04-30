@@ -398,14 +398,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 
 	@Override
 	public List<AggregatedDevice> retrieveMultipleStatistics() {
-		if (System.currentTimeMillis() - lastControlActivationTimestamp <= 5000) {
-			if (logger.isDebugEnabled()) {
-				logger.debug("Device aggregator is in the cooldown state, emergency delivery update is skipped.");
-			}
-
-			updateDeviceSettingsMode();
-			return this.localAggregatedDevices;
-		}
 		if (CollectionUtils.isEmpty(this.devices)) {
 			if (this.logger.isWarnEnabled()) {
 				this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, "device"));
