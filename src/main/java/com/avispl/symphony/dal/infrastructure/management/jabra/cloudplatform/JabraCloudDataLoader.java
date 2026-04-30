@@ -10,7 +10,6 @@ import java.util.Map;
 
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Setting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.valuespace.SettingsValuespace;
-import com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 

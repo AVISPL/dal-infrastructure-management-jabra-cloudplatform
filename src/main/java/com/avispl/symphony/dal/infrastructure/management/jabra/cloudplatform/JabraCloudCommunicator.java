@@ -70,7 +70,6 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.typ
 import com.avispl.symphony.dal.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import static com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant.dropdownOptions;
 import static com.avispl.symphony.dal.util.ControllablePropertyFactory.*;
 
 /**
@@ -107,9 +106,12 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	/**
 	 * Device adapter instantiation timestamp.
 	 */
-	private Long lastControlActivationTimestamp = 0L;
-
 	private long adapterInitializationTimestamp;
+
+	/**
+	 * Last control activation timestamp for controls cooldown calculation
+	 * */
+	private Long lastControlActivationTimestamp = 0L;
 
 	/**
 	 * Duration (in milliseconds) of the last monitoring cycle.
@@ -1081,30 +1083,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private void addDeviceControl(List<AdvancedControllableProperty> controls, AdvancedControllableProperty control) {
 		Optional<AdvancedControllableProperty> availableControl = controls.stream().filter(controllableProperty -> controllableProperty.getName().equalsIgnoreCase(control.getName())).findAny();
 		availableControl.ifPresentOrElse(controllableProperty -> controllableProperty.setValue(control.getValue()), () -> controls.add(control));
-	}
-
-	/**
-	 * Generates a settings controllable property map for a given device ID.
-	 * <p>
-	 * The method constructs a property name using a predefined format and determines the corresponding value
-	 * based on the device's connection status and whether an updated settings cache exists for the device.
-	 * If the device is connected and has a pending settings cache, {@link Constant#NOT_AVAILABLE} is returned.
-	 * Otherwise, it attempts to extract the value using a utility method with a new {@link Settings} instance.
-	 * </p>
-	 *
-	 * @param isConnected whether the device is currently connected
-	 * @param deviceId the unique identifier of the device
-	 * @param property the specific {@link SettingProperty} to extract the value for
-	 * @return a singleton map where the key is the generated property name and the value is the resolved setting value or a default fallback
-	 */
-	private Map<String, String> generateSettingsProperty(boolean isConnected, String deviceId, SettingProperty property) {
-		boolean hasUpdatedSettingsCache = this.updatedSettingsCaches.stream().anyMatch(cache -> cache.getDeviceId().equals(deviceId));
-		String propertyName = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, property.getName());
-		String propertyValue = isConnected && hasUpdatedSettingsCache
-				? Constant.NOT_AVAILABLE
-				: Optional.ofNullable(Util.mapToSettingsProperty(property, new Settings())).orElse(Constant.NOT_AVAILABLE);
-
-		return Collections.singletonMap(propertyName, propertyValue);
 	}
 
 	/**
