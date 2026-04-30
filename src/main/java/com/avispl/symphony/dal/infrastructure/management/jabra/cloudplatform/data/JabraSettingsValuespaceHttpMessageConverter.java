@@ -1,14 +1,14 @@
+/*
+ * Copyright (c) 2026 AVI-SPL, Inc. All Rights Reserved.
+ */
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data;
 
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Setting;
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.SettingType;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.valuespace.SettingDescriptor;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.valuespace.SettingsValuespace;
 import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpOutputMessage;
 import org.springframework.http.MediaType;
@@ -17,11 +17,16 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.lang.Nullable;
 
 import java.io.IOException;
-import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+/**
+ * Process json response of Jabra+ settings valuespaces to {@link SettingsValuespace}
+ *
+ * @since 1.1.1
+ * @author Maksym.Rossiitsev/AVISPL Team
+ * */
 public class JabraSettingsValuespaceHttpMessageConverter implements GenericHttpMessageConverter<SettingsValuespace> {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final List<MediaType> SUPPORTED_MEDIA_TYPES = List.of(
@@ -50,7 +55,6 @@ public class JabraSettingsValuespaceHttpMessageConverter implements GenericHttpM
     @Override
     public void write(SettingsValuespace settings, @Nullable Type type, @Nullable MediaType contentType,
                       HttpOutputMessage outputMessage) throws IOException {
-        // TODO: implement if needed
     }
 
     // ── HttpMessageConverter (raw class) ─────────────────────────────
@@ -68,7 +72,6 @@ public class JabraSettingsValuespaceHttpMessageConverter implements GenericHttpM
     @Override
     public void write(SettingsValuespace settings, @Nullable MediaType contentType,
                       HttpOutputMessage outputMessage) throws IOException {
-        // TODO: implement if needed
     }
 
     @Override

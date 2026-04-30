@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2026 AVI-SPL, Inc. All Rights Reserved.
+ */
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data;
 
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Setting;
@@ -20,6 +23,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Process json response of Jabra+ settings to {@link List} of {@link Setting}
+ *
+ * @since 1.1.1
+ * @author Maksym.Rossiitsev/AVISPL Team
+ * */
 public class JabraSettingsHttpMessageConverter implements GenericHttpMessageConverter<List<Setting>> {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final List<MediaType> SUPPORTED_MEDIA_TYPES = List.of(
@@ -72,7 +81,6 @@ public class JabraSettingsHttpMessageConverter implements GenericHttpMessageConv
     @Override
     public void write(List<Setting> settings, @Nullable MediaType contentType,
                       HttpOutputMessage outputMessage) throws IOException {
-        // TODO: implement if needed
     }
 
     @Override
