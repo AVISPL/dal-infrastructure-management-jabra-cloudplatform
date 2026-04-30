@@ -107,13 +107,18 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	/**
 	 * Device adapter instantiation timestamp.
 	 */
-	private Long adapterInitializationTimestamp;
-
 	private Long lastControlActivationTimestamp = 0L;
+
+	private long adapterInitializationTimestamp;
+
 	/**
 	 * Duration (in milliseconds) of the last monitoring cycle.
 	 */
-	private Long lastMonitoringCycleDuration;
+	private long lastMonitoringCycleDuration;
+	/**
+	 * Timestamp of last room control invocation
+	 * */
+	private long lastRoomControlTimestamp;
 	/**
 	 * Executes asynchronous tasks for data loader.
 	 */
@@ -185,7 +190,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.reentrantLock = new ReentrantLock();
 		this.versionProperties = new Properties();
 		this.adapterInitializationTimestamp = System.currentTimeMillis();
-		this.lastMonitoringCycleDuration = 0L;
 		this.objectMapper = new ObjectMapper();
 
 		this.localExtendedStatistics = new ExtendedStatistics();
@@ -377,6 +381,12 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 		this.reentrantLock.lock();
 		try {
+			if (System.currentTimeMillis() - lastRoomControlTimestamp < 5000 && localExtendedStatistics.getStatistics() != null) {
+				if (logger.isDebugEnabled()) {
+					logger.debug("Aggregator is in room control cooldown mode, populating room controls from cache.");
+				}
+				return Collections.singletonList(this.localExtendedStatistics);
+			}
 			this.verifyAdapterProperties();
 			this.setupData();
 			Map<String, String> statistics = new HashMap<>(this.getGeneralProperties());
@@ -470,6 +480,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			if (propertyName.endsWith("Reboot") && availableRooms != null) {
 				Room room = availableRooms.get(controllerParts[0]);
 				rebootRoom(room.getId());
+				lastRoomControlTimestamp = System.currentTimeMillis();
 				return;
 			}
 
@@ -575,6 +586,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 		this.adapterInitializationTimestamp = 0L;
 		this.lastMonitoringCycleDuration = 0L;
+		this.lastRoomControlTimestamp = 0L;
 		super.internalDestroy();
 	}
 
@@ -708,7 +720,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private void setupDataLoader() {
 		if (this.executorService == null) {
-			this.executorService = Executors.newFixedThreadPool(1);
+			this.executorService = Executors.newFixedThreadPool(2);
 			this.dataLoader = new JabraCloudDataLoader(
 					this,
 					this.devices, this.devicesSettings, this.featureModelSettingsValuespace, this.deviceIdFeatureModelSettingsValuespace, this.getIntervalSettingByType(RetrievalType.DEVICE_SETTINGS)
@@ -1123,7 +1135,17 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * */
 	private void rebootRoom(String roomId) throws Exception {
 		String requestUrl = String.format(ApiConstant.ROOMS_REBOOT_ENDPOINT, roomId);
-		doPost(requestUrl, null, JsonNode.class);
+		try {
+			CompletableFuture.runAsync(() -> {
+				try {
+					doPost(requestUrl, JsonNode.class);
+				} catch (Exception e) {
+					this.logger.error("Unable to process room reboot request.", e);
+				}
+			}, executorService);
+		} catch (RejectedExecutionException e) {
+			throw new RuntimeException(String.format("Unable to request reboot operation for room with ID %s: another reboot operation is in progress. Please try again later.", roomId));
+		}
 	}
 	/**
 	 * Checks whether the specified property group is configured to be displayed.
