@@ -8,6 +8,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Setting;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.valuespace.SettingsValuespace;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -17,6 +19,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.com
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.IntervalSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
+import org.springframework.core.ParameterizedTypeReference;
 
 /**
  * This class implements a data loader that periodically collects settings data
@@ -33,8 +36,9 @@ public class JabraCloudDataLoader implements Runnable {
 	private final Log logger = LogFactory.getLog(this.getClass());
 	private final JabraCloudCommunicator communicator;
 	private final List<Device> devices;
-	private final Map<String, Settings> supportedDevicesSettings;
-	private final Map<String, Map<String, Map<String, Object>>> unSupportedDevicesSettings;
+	private final Map<String, List<Setting>> devicesSettings;
+	private final Map<String, SettingsValuespace> featureModelSettingsValuespace;
+	private final Map<String, String> deviceIdFeatureModelSettingsValuespace;
 	private final IntervalSetting deviceSettingsInterval;
 
 	private volatile boolean inProgress;
@@ -46,14 +50,15 @@ public class JabraCloudDataLoader implements Runnable {
 	public JabraCloudDataLoader(
 			JabraCloudCommunicator communicator,
 			List<Device> devices,
-			Map<String, Settings> supportedDevicesSettings, Map<String, Map<String, Map<String, Object>>> unSupportedDevicesSettings,
+			Map<String, List<Setting>> devicesSettings, Map<String, SettingsValuespace> featureModelSettingsValuespace, Map<String, String> deviceIdFeatureModelSettingsValuespace,
 			IntervalSetting deviceSettingsInterval
 	) {
 		this.communicator = communicator;
 		this.devices = devices;
-		this.supportedDevicesSettings = supportedDevicesSettings;
-		this.unSupportedDevicesSettings = unSupportedDevicesSettings;
+		this.devicesSettings = devicesSettings;
 		this.deviceSettingsInterval = deviceSettingsInterval;
+		this.featureModelSettingsValuespace = featureModelSettingsValuespace;
+		this.deviceIdFeatureModelSettingsValuespace = deviceIdFeatureModelSettingsValuespace;
 
 		this.inProgress = true;
 		this.devicePaused = true;
@@ -146,26 +151,27 @@ public class JabraCloudDataLoader implements Runnable {
 	 * </p>
 	 */
 	private void collectAggregatedDeviceData() {
-		Map<String, Settings> newSupportedDevicesSettings = new HashMap<>();
-		Map<String, Map<String, Map<String, Object>>> newUnsupportedDevicesSettings = new HashMap<>();
+		Map<String, List<Setting>> settingsList = new HashMap<>();
 		for (Device device : this.devices) {
 			try {
-				String url = ApiConstant.DEVICE_SETTINGS_ENDPOINT.replace(ApiConstant.DEVICE_ID_PARAM, device.getId());
-				if (Util.isSupportedDevice(device)) {
-					Settings deviceSettings = this.communicator.fetchData(url, ApiConstant.SETTINGS_FIELD, ApiConstant.SETTINGS_RES_TYPE);
-					newSupportedDevicesSettings.put(device.getId(), deviceSettings);
-				} else {
-					Map<String, Map<String, Object>> deviceSettings = this.communicator.fetchData(url, ApiConstant.SETTINGS_FIELD, ApiConstant.COMMON_SETTINGS_RES_TYPE);
-					newUnsupportedDevicesSettings.put(device.getId(), deviceSettings);
+				String settingsValuespace = String.format("https://cdn.cloud.jabra.com/models/v/16/vendors/2830/products/%s/variants/%s/firmware-versions/%s/feature-model.json", device.getProductId(), device.getVariantType(), device.getFirmwareVersion());
+				if (!featureModelSettingsValuespace.containsKey(settingsValuespace)) {
+					SettingsValuespace valuespace = this.communicator.fetchData(settingsValuespace, new ParameterizedTypeReference<>(){});
+					featureModelSettingsValuespace.put(settingsValuespace, valuespace);
 				}
+				deviceIdFeatureModelSettingsValuespace.put(device.getId(), settingsValuespace);
+
+				String url = String.format(ApiConstant.DEVICE_SETTINGS_ENDPOINT, device.getId());
+
+				List<Setting> settings = this.communicator.fetchData(url, new ParameterizedTypeReference<List<Setting>>(){});
+				settingsList.put(device.getId(), settings);
+
 			} catch (Exception e) {
 				this.logger.error(e.getMessage(), e);
 			}
 		}
-		this.supportedDevicesSettings.clear();
-		this.supportedDevicesSettings.putAll(newSupportedDevicesSettings);
-		this.unSupportedDevicesSettings.clear();
-		this.unSupportedDevicesSettings.putAll(newUnsupportedDevicesSettings);
+		this.devicesSettings.clear();
+		this.devicesSettings.putAll(settingsList);
 	}
 
 	/**
