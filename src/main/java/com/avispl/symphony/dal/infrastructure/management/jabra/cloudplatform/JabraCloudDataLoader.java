@@ -40,6 +40,7 @@ public class JabraCloudDataLoader implements Runnable {
 	private final Map<String, SettingsValuespace> featureModelSettingsValuespace;
 	private final Map<String, String> deviceIdFeatureModelSettingsValuespace;
 	private final IntervalSetting deviceSettingsInterval;
+	private final String settingsValuespaceURLTemplate;
 
 	private volatile boolean inProgress;
 	private volatile boolean devicePaused;
@@ -51,7 +52,7 @@ public class JabraCloudDataLoader implements Runnable {
 			JabraCloudCommunicator communicator,
 			List<Device> devices,
 			Map<String, List<Setting>> devicesSettings, Map<String, SettingsValuespace> featureModelSettingsValuespace, Map<String, String> deviceIdFeatureModelSettingsValuespace,
-			IntervalSetting deviceSettingsInterval
+			IntervalSetting deviceSettingsInterval, String settingsValuespaceURLTemplate
 	) {
 		this.communicator = communicator;
 		this.devices = devices;
@@ -59,6 +60,7 @@ public class JabraCloudDataLoader implements Runnable {
 		this.deviceSettingsInterval = deviceSettingsInterval;
 		this.featureModelSettingsValuespace = featureModelSettingsValuespace;
 		this.deviceIdFeatureModelSettingsValuespace = deviceIdFeatureModelSettingsValuespace;
+		this.settingsValuespaceURLTemplate = settingsValuespaceURLTemplate;
 
 		this.inProgress = true;
 		this.devicePaused = true;
@@ -154,7 +156,7 @@ public class JabraCloudDataLoader implements Runnable {
 		Map<String, List<Setting>> settingsList = new HashMap<>();
 		for (Device device : this.devices) {
 			try {
-				String settingsValuespace = String.format("https://cdn.cloud.jabra.com/models/v/16/vendors/2830/products/%s/variants/%s/firmware-versions/%s/feature-model.json", device.getProductId(), device.getVariantType(), device.getFirmwareVersion());
+				String settingsValuespace = String.format(settingsValuespaceURLTemplate, device.getProductId(), device.getVariantType(), device.getFirmwareVersion());
 				if (!featureModelSettingsValuespace.containsKey(settingsValuespace)) {
 					SettingsValuespace valuespace = this.communicator.fetchData(settingsValuespace, new ParameterizedTypeReference<>(){});
 					featureModelSettingsValuespace.put(settingsValuespace, valuespace);
@@ -163,7 +165,8 @@ public class JabraCloudDataLoader implements Runnable {
 
 				String url = String.format(ApiConstant.DEVICE_SETTINGS_ENDPOINT, device.getId());
 
-				List<Setting> settings = this.communicator.fetchData(url, new ParameterizedTypeReference<List<Setting>>(){});
+				List<Setting> settings = this.communicator.fetchData(url, new ParameterizedTypeReference<>() {
+                });
 				settingsList.put(device.getId(), settings);
 
 			} catch (Exception e) {

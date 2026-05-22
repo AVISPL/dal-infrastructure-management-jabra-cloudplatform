@@ -30,14 +30,24 @@ public class SettingsRequest {
 	 * Represents details of a setting option, including the selected value and lock status.
 	 */
 	public static class OptionDetail {
+		private boolean requiresRestart;
 		private boolean isLocked;
 		private String value;
 
-		public OptionDetail(String value) {
+		public OptionDetail(String value, boolean requiresRestart) {
 			this.isLocked = false;
 			this.value = value;
+			this.requiresRestart = requiresRestart;
 		}
 
+		/**
+		 * Retrieves {@link #requiresRestart}
+		 *
+		 * @return boolean value of {@link #requiresRestart}
+		 */
+		public boolean requiresRestart() {
+			return requiresRestart;
+		}
 		/**
 		 * Retrieves {@link #value}
 		 *
@@ -65,7 +75,11 @@ public class SettingsRequest {
 			try {
 				return Integer.parseInt(this.value);
 			} catch (NumberFormatException e) {
-				return value;
+				try {
+					return Math.round(Double.parseDouble(this.value));
+				} catch (NumberFormatException e2) {
+					return value;
+				}
 			}
 		}
 
