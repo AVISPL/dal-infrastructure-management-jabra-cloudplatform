@@ -68,7 +68,6 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.typ
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.GeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.RoomProperty;
 import com.avispl.symphony.dal.util.StringUtils;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import static com.avispl.symphony.dal.util.ControllablePropertyFactory.*;
 
@@ -405,12 +404,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 		this.reentrantLock.lock();
 		try {
-			if (System.currentTimeMillis() - lastRoomControlTimestamp < 5000 && localExtendedStatistics.getStatistics() != null) {
-				if (logger.isDebugEnabled()) {
-					logger.debug("Aggregator is in room control cooldown mode, populating room controls from cache.");
-				}
-				return Collections.singletonList(this.localExtendedStatistics);
-			}
 			this.verifyAdapterProperties();
 			this.setupData();
 			Map<String, String> statistics = new HashMap<>(this.getGeneralProperties());
@@ -439,13 +432,13 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			updateDeviceSettingsMode();
 			return this.localAggregatedDevices;
 		}
+		this.setupDataLoader();
 		if (CollectionUtils.isEmpty(this.devices)) {
 			if (this.logger.isWarnEnabled()) {
 				this.logger.warn(String.format(Constant.LIST_EMPTY_WARNING, "device"));
 			}
 			return Collections.emptyList();
 		}
-		this.setupDataLoader();
 		List<AggregatedDevice> aggregatedDevices = new ArrayList<>();
 		this.devices.forEach(device -> {
 			AggregatedDevice aggregatedDevice = new AggregatedDevice();
@@ -552,7 +545,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 				for (SettingsRequest settingsRequest : this.updatedSettingsCaches) {
 					if (settingsRequest.getDeviceId().equals(controllableProperty.getDeviceId())) {
 						this.performControlOperation(ControlMethod.PATCH, url, settingsRequest.getRequest());
-						this.disconnect();
 						this.updatedSettingsCaches.remove(settingsRequest);
 						break;
 					}
@@ -715,20 +707,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	private void setupData() throws FailedLoginException {
 		this.requestStateHandler.clearRequests();
 
-		//	Collect data for this.devices
-		IntervalSetting devicesInterval = this.getIntervalSettingByType(RetrievalType.DEVICES);
-		if (devicesInterval.isValid()) {
-			this.logger.info(String.format("Devices retrieval is available now. %s", devicesInterval.getNextAvailabilityInfo()));
-			String devicesEndpoint = UriComponentsBuilder.fromPath(ApiConstant.DEVICES_ENDPOINT)
-					.queryParam(ApiConstant.CLIENT_TYPE_QUERY, this.clientTypeFilter.getValue())
-					.queryParam(ApiConstant.PAGE_SIZE_QUERY, this.apiPageSize)
-					.toUriString();
-
-			List<Device> fetched = this.fetchData(devicesEndpoint, ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE);
-			if (fetched != null) {
-				this.devices = new CopyOnWriteArrayList<>(fetched);
-			}
-		}
 		if (CollectionUtils.isEmpty(this.devices) || CollectionUtils.isEmpty(this.displayPropertyGroups)) {
 			return;
 		}
@@ -781,7 +759,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.executorService = Executors.newFixedThreadPool(2);
 			this.dataLoader = new JabraCloudDataLoader(
 					this,
-					this.devices, this.devicesSettings, this.featureModelSettingsValuespace, this.deviceIdFeatureModelSettingsValuespace, this.getIntervalSettingByType(RetrievalType.DEVICE_SETTINGS), this.settingsValuespaceURLTemplate
+					this.devices, this.devicesSettings, this.featureModelSettingsValuespace, this.deviceIdFeatureModelSettingsValuespace,
+					this.getIntervalSettingByType(RetrievalType.DEVICE_SETTINGS), this.clientTypeFilter, this.apiPageSize, this.settingsValuespaceURLTemplate
 			);
 			this.executorService.submit(this.dataLoader);
 		}
@@ -1062,7 +1041,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 				boolean requiresRestart = pendingChanges.values().stream().anyMatch(OptionDetail::requiresRestart);
 
 				properties.put(applyKey, "N/A");
-				addDeviceControl(controls, createButton(applyKey, "Apply", "Applying", requiresRestart ? SETTING_UPDATE_TIME : 0L));
+				// 60s gracePeriod because new controls cant be applied unless 1 minute has passed.
+				addDeviceControl(controls, createButton(applyKey, "Apply", "Applying", requiresRestart ? SETTING_UPDATE_TIME : 60000L));
 
 				properties.put(cancelKey, "N/A");
 				addDeviceControl(controls, createButton(cancelKey, "Cancel", "Canceling", 0L));
