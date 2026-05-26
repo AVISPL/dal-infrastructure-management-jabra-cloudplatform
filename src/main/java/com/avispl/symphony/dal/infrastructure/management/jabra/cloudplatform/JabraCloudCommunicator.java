@@ -1065,7 +1065,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 
 				properties.put(applyKey, "N/A");
 				// 60s gracePeriod because new controls cant be applied unless 1 minute has passed.
-				addDeviceControl(controls, createButton(applyKey, "Apply", "Applying", requiresRestart ? SETTING_UPDATE_TIME : 60L));
+				addDeviceControl(controls, createButton(applyKey, "Apply", "Applying", requiresRestart ? SETTING_UPDATE_TIME : 60000L));
 
 				properties.put(cancelKey, "N/A");
 				addDeviceControl(controls, createButton(cancelKey, "Cancel", "Canceling", 0L));
