@@ -47,9 +47,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.bas
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.RequestStateHandler;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.Util;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant;
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.ApiConstant.ControlMethod;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
-import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data.JabraCloudRequestInterceptor;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.IntervalSetting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Computer;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
@@ -67,6 +65,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.typ
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.GeneralProperty;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregator.RoomProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.data.JabraCloudRequestInterceptor;
 import com.avispl.symphony.dal.util.StringUtils;
 
 import static com.avispl.symphony.dal.util.ControllablePropertyFactory.*;
@@ -102,6 +101,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * Requested page for paginated API endpoints
 	 * */
 	private int apiPageSize = 100;
+	/**
+	 * API Version value for API header use
+	 * */
+	private String apiVersion = "1";
 	/**
 	 * Device adapter instantiation timestamp.
 	 */
@@ -212,6 +215,24 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		this.configManagement = false;
 		this.retrievalIntervals = new EnumMap<>(RetrievalType.class);
 		this.displayPropertyGroups = new HashSet<>();
+	}
+
+	/**
+	 * Retrieves {@link #apiVersion}
+	 *
+	 * @return value of {@link #apiVersion}
+	 */
+	public String getApiVersion() {
+		return apiVersion;
+	}
+
+	/**
+	 * Sets {@link #apiVersion} value
+	 *
+	 * @param apiVersion new value of {@link #apiVersion}
+	 */
+	public void setApiVersion(String apiVersion) {
+		this.apiVersion = apiVersion;
 	}
 
 	/**
@@ -455,7 +476,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			aggregatedDevice.setCategory(defineDeviceCategory(device.getProductName()));
 
 			String deviceConnectionStatus = device.getDeviceConnectionStatus();
-			aggregatedDevice.setDeviceOnline(!"Offline".equals(deviceConnectionStatus));
+			aggregatedDevice.setDeviceOnline(StringUtils.isNotNullOrEmpty(deviceConnectionStatus) && !"Offline".equals(deviceConnectionStatus));
 			aggregatedDevice.setSerialNumber(device.getSerialNumber());
 			aggregatedDevice.setTimestamp(System.currentTimeMillis());
 
@@ -507,7 +528,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 
 			if (propertyNameUngrouped.endsWith("Reboot") && availableRooms != null) {
 				Room room = availableRooms.get(controllerParts[0]);
-				rebootRoom(room.getId());
+				this.rebootRoom(room.getId());
 				lastRoomControlTimestamp = System.currentTimeMillis();
 				return;
 			}
@@ -544,7 +565,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 				String url = String.format(ApiConstant.DEVICE_SETTINGS_ENDPOINT, deviceId);
 				for (SettingsRequest settingsRequest : this.updatedSettingsCaches) {
 					if (settingsRequest.getDeviceId().equals(controllableProperty.getDeviceId())) {
-						this.performControlOperation(ControlMethod.PATCH, url, settingsRequest.getRequest());
+						this.applySettings(url, settingsRequest.getRequest());
 						this.updatedSettingsCaches.remove(settingsRequest);
 						break;
 					}
@@ -583,7 +604,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	protected HttpHeaders putExtraRequestHeaders(HttpMethod httpMethod, String uri, HttpHeaders headers) throws Exception {
 		this.authenticate();
 		headers.set(ApiConstant.API_KEY_HEADER, this.getPassword());
-		headers.set(ApiConstant.API_VERSION_HEADER, "1");
+		headers.set(ApiConstant.API_VERSION_HEADER, this.apiVersion);
 		headers.setContentType(MediaType.APPLICATION_JSON);
 
 		return super.putExtraRequestHeaders(httpMethod, uri, headers);
@@ -625,8 +646,10 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
         RestTemplate restTemplate = super.obtainRestTemplate();
         List<ClientHttpRequestInterceptor> interceptors = restTemplate.getInterceptors();
 		List<HttpMessageConverter<?>> converters = restTemplate.getMessageConverters();
-        if (!interceptors.contains(jabraCloudRequestInterceptor))
-            interceptors.add(jabraCloudRequestInterceptor);
+
+        if (!interceptors.contains(jabraCloudRequestInterceptor)) {
+			interceptors.add(jabraCloudRequestInterceptor);
+		}
 		if (!converters.contains(jabraSettingsHttpMessageConterter)) {
 			converters.add(0, jabraSettingsHttpMessageConterter);
 		}
@@ -1042,7 +1065,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 
 				properties.put(applyKey, "N/A");
 				// 60s gracePeriod because new controls cant be applied unless 1 minute has passed.
-				addDeviceControl(controls, createButton(applyKey, "Apply", "Applying", requiresRestart ? SETTING_UPDATE_TIME : 60000L));
+				addDeviceControl(controls, createButton(applyKey, "Apply", "Applying", requiresRestart ? SETTING_UPDATE_TIME : 60L));
 
 				properties.put(cancelKey, "N/A");
 				addDeviceControl(controls, createButton(cancelKey, "Cancel", "Canceling", 0L));
@@ -1323,21 +1346,11 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * Performs a control operation on the given URI with the provided request body.
 	 * <p>Logs and throws meaningful exceptions for failure scenarios.</p>
 	 *
-	 * @param httpMethod the HTTP method to use
 	 * @param endpoint the target URI to send the request to
 	 * @param requestBody the request payload to be sent
 	 */
-	private void performControlOperation(ControlMethod httpMethod, String endpoint, Object requestBody) throws Exception {
-		switch (httpMethod) {
-			case POST:
-				this.doPost(endpoint, requestBody, Object.class);
-				break;
-			case PATCH:
-				this.doPatch(endpoint, requestBody, Object.class);
-				break;
-			default:
-				break;
-		}
+	private void applySettings(String endpoint, Object requestBody) throws Exception {
+		this.doPatch(endpoint, requestBody, Object.class);
 	}
 
 	/**
