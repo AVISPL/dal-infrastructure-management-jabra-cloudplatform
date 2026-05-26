@@ -783,7 +783,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.dataLoader = new JabraCloudDataLoader(
 					this,
 					this.devices, this.devicesSettings, this.featureModelSettingsValuespace, this.deviceIdFeatureModelSettingsValuespace,
-					this.getIntervalSettingByType(RetrievalType.DEVICE_SETTINGS), this.clientTypeFilter, this.apiPageSize, this.settingsValuespaceURLTemplate
+					this.retrievalIntervals, this.clientTypeFilter, this.apiPageSize, this.settingsValuespaceURLTemplate
 			);
 			this.executorService.submit(this.dataLoader);
 		}
@@ -1188,7 +1188,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 * Returns the IntervalSetting for the given type, creating one if absent.
 	 * Guarantees a non-null entry so callers don't need null checks.
 	 */
-	private IntervalSetting getIntervalSettingByType(RetrievalType type) {
+	IntervalSetting getIntervalSettingByType(RetrievalType type) {
 		return retrievalIntervals.computeIfAbsent(type, t -> new IntervalSetting());
 	}
 
