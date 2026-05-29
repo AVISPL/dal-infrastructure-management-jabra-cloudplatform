@@ -120,10 +120,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 	 */
 	private long lastMonitoringCycleDuration;
 	/**
-	 * Timestamp of last room control invocation
-	 * */
-	private long lastRoomControlTimestamp;
-	/**
 	 * Executes asynchronous tasks for data loader.
 	 */
 	private ExecutorService executorService;
@@ -529,7 +525,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			if (propertyNameUngrouped.endsWith("Reboot") && availableRooms != null) {
 				Room room = availableRooms.get(controllerParts[0]);
 				this.rebootRoom(room.getId());
-				lastRoomControlTimestamp = System.currentTimeMillis();
 				return;
 			}
 
@@ -636,7 +631,6 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 		}
 		this.adapterInitializationTimestamp = 0L;
 		this.lastMonitoringCycleDuration = 0L;
-		this.lastRoomControlTimestamp = 0L;
 		super.internalDestroy();
 	}
 
@@ -783,7 +777,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			this.dataLoader = new JabraCloudDataLoader(
 					this,
 					this.devices, this.devicesSettings, this.featureModelSettingsValuespace, this.deviceIdFeatureModelSettingsValuespace,
-					this.retrievalIntervals, this.clientTypeFilter, this.apiPageSize, this.settingsValuespaceURLTemplate
+					this.clientTypeFilter, this.apiPageSize, this.settingsValuespaceURLTemplate
 			);
 			this.executorService.submit(this.dataLoader);
 		}

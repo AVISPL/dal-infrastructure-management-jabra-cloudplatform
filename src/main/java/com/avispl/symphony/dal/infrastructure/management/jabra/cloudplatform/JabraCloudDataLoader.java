@@ -4,7 +4,6 @@
 package com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform;
 
 import java.time.Duration;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,7 +60,7 @@ public class JabraCloudDataLoader implements Runnable {
 			JabraCloudCommunicator communicator,
 			List<Device> devices,
 			Map<String, List<Setting>> devicesSettings, Map<String, SettingsValuespace> featureModelSettingsValuespace, Map<String, String> deviceIdFeatureModelSettingsValuespace,
-			EnumMap<RetrievalType, IntervalSetting> retrievalIntervals, ClientTypeFilter clientTypeFilter, int apiPageSize, String settingsValuespaceURLTemplate
+			ClientTypeFilter clientTypeFilter, int apiPageSize, String settingsValuespaceURLTemplate
 	) {
 		this.communicator = communicator;
 		this.devices = devices;

@@ -106,21 +106,21 @@
       <artifactId>symphony-api-dal</artifactId>
       <version>${symphonyApiVersion}</version>
       <scope>system</scope>
-      <systemPath>${basedir}/lib/symphony-api-dal-6.3.0.jar</systemPath>
+      <systemPath>${basedir}/lib/symphony-api-dal-6.5.0.jar</systemPath>
     </dependency>
     <dependency>
       <groupId>com.avispl.symphony.dal</groupId>
       <artifactId>symphony-dal-commons</artifactId>
       <version>${symphonyApiVersion}</version>
       <scope>system</scope>
-      <systemPath>${basedir}/lib/symphony-dal-commons-6.5.0.jar</systemPath>
+      <systemPath>${basedir}/lib/symphony-dal-commons-6.6.0.jar</systemPath>
     </dependency>
     <dependency>
       <groupId>com.avispl.symphony.api</groupId>
       <artifactId>symphony-api-commons</artifactId>
       <version>${symphonyApiVersion}</version>
       <scope>system</scope>
-      <systemPath>${basedir}/lib/symphony-api-commons-6.2.0.jar</systemPath>
+      <systemPath>${basedir}/lib/symphony-api-commons-6.3.0.jar</systemPath>
     </dependency>
     <dependency>
       <groupId>org.icmp4j</groupId>
@@ -182,6 +182,11 @@
       <artifactId>jackson-dataformat-xml</artifactId>
       <version>2.14.2</version>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.xml.bind</groupId>
+      <artifactId>jakarta.xml.bind-api</artifactId>
+      <version>4.0.2</version>
     </dependency>
     <dependency>
       <groupId>com.jcraft</groupId>
