@@ -7,9 +7,13 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Setting;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.valuespace.SettingsValuespace;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.adapter.ClientTypeFilter;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.adapter.RetrievalType;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -20,6 +24,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.device.Device;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.models.settings.Settings;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * This class implements a data loader that periodically collects settings data
@@ -40,6 +45,10 @@ public class JabraCloudDataLoader implements Runnable {
 	private final Map<String, SettingsValuespace> featureModelSettingsValuespace;
 	private final Map<String, String> deviceIdFeatureModelSettingsValuespace;
 	private final IntervalSetting deviceSettingsInterval;
+	private final IntervalSetting devicesInterval;
+	private final String settingsValuespaceURLTemplate;
+	private final ClientTypeFilter clientTypeFilter;
+	private final int apiPageSize;
 
 	private volatile boolean inProgress;
 	private volatile boolean devicePaused;
@@ -51,14 +60,18 @@ public class JabraCloudDataLoader implements Runnable {
 			JabraCloudCommunicator communicator,
 			List<Device> devices,
 			Map<String, List<Setting>> devicesSettings, Map<String, SettingsValuespace> featureModelSettingsValuespace, Map<String, String> deviceIdFeatureModelSettingsValuespace,
-			IntervalSetting deviceSettingsInterval
+			ClientTypeFilter clientTypeFilter, int apiPageSize, String settingsValuespaceURLTemplate
 	) {
 		this.communicator = communicator;
 		this.devices = devices;
 		this.devicesSettings = devicesSettings;
-		this.deviceSettingsInterval = deviceSettingsInterval;
+		this.deviceSettingsInterval = communicator.getIntervalSettingByType(RetrievalType.DEVICE_SETTINGS);
+		this.devicesInterval = communicator.getIntervalSettingByType(RetrievalType.DEVICES);
 		this.featureModelSettingsValuespace = featureModelSettingsValuespace;
 		this.deviceIdFeatureModelSettingsValuespace = deviceIdFeatureModelSettingsValuespace;
+		this.settingsValuespaceURLTemplate = settingsValuespaceURLTemplate;
+		this.clientTypeFilter = clientTypeFilter;
+		this.apiPageSize = apiPageSize;
 
 		this.inProgress = true;
 		this.devicePaused = true;
@@ -98,8 +111,31 @@ public class JabraCloudDataLoader implements Runnable {
 
 			long startCycle = System.currentTimeMillis();
 			if (!this.cycleExecuted && this.nextCollectionTime < System.currentTimeMillis()) {
+				if (this.devicesInterval.isValid()) {
+					this.logger.info(String.format("Devices retrieval is available now. Next available: %s", this.devicesInterval.getNextAvailabilityInfo()));
+					try {
+						String devicesEndpoint = UriComponentsBuilder.fromPath(ApiConstant.DEVICES_ENDPOINT)
+								.queryParam(ApiConstant.CLIENT_TYPE_QUERY, this.clientTypeFilter.getValue())
+								.queryParam(ApiConstant.PAGE_SIZE_QUERY, this.apiPageSize)
+								.toUriString();
+
+						List<Device> fetched = this.communicator.fetchData(devicesEndpoint, ApiConstant.ITEMS_FIELD, ApiConstant.DEVICES_RES_TYPE);
+						if (fetched != null) {
+							Set<String> fetchedIds = fetched.stream().map(Device::getId).collect(Collectors.toSet());
+							Set<String> existingIds = this.devices.stream().map(Device::getId).collect(Collectors.toSet());
+
+							this.devices.removeIf(d -> !fetchedIds.contains(d.getId()));
+							fetched.stream()
+									.filter(f -> !existingIds.contains(f.getId()))
+									.forEach(this.devices::add);
+						}
+					} catch (Exception e) {
+						logger.error("Unable to retrieve devices list metadata.", e);
+					}
+				}
+
 				if (this.deviceSettingsInterval.isValid() && this.communicator.shouldDisplayGroup(Constant.AGGREGATED_SETTINGS_GROUP)) {
-					this.logger.info(String.format("Device settings retrieval is available now. %s", this.deviceSettingsInterval.getNextAvailabilityInfo()));
+					this.logger.info(String.format("Device settings retrieval is available now. Next available: %s", this.deviceSettingsInterval.getNextAvailabilityInfo()));
 					this.collectAggregatedDeviceData();
 				}
 				this.cycleExecuted = true;
@@ -154,7 +190,7 @@ public class JabraCloudDataLoader implements Runnable {
 		Map<String, List<Setting>> settingsList = new HashMap<>();
 		for (Device device : this.devices) {
 			try {
-				String settingsValuespace = String.format("https://cdn.cloud.jabra.com/models/v/16/vendors/2830/products/%s/variants/%s/firmware-versions/%s/feature-model.json", device.getProductId(), device.getVariantType(), device.getFirmwareVersion());
+				String settingsValuespace = String.format(settingsValuespaceURLTemplate, device.getProductId(), device.getVariantType(), device.getFirmwareVersion());
 				if (!featureModelSettingsValuespace.containsKey(settingsValuespace)) {
 					SettingsValuespace valuespace = this.communicator.fetchData(settingsValuespace, new ParameterizedTypeReference<>(){});
 					featureModelSettingsValuespace.put(settingsValuespace, valuespace);
@@ -163,7 +199,8 @@ public class JabraCloudDataLoader implements Runnable {
 
 				String url = String.format(ApiConstant.DEVICE_SETTINGS_ENDPOINT, device.getId());
 
-				List<Setting> settings = this.communicator.fetchData(url, new ParameterizedTypeReference<List<Setting>>(){});
+				List<Setting> settings = this.communicator.fetchData(url, new ParameterizedTypeReference<>() {
+                });
 				settingsList.put(device.getId(), settings);
 
 			} catch (Exception e) {
