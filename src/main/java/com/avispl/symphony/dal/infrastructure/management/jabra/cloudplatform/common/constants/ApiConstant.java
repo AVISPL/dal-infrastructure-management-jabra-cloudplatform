@@ -27,8 +27,6 @@ public class ApiConstant {
 	//	API variables
 	public static final String API_KEY_HEADER = "Ocp-Apim-Subscription-Key";
 	public static final String API_VERSION_HEADER = "api-version";
-	public static final String DEVICE_ID_PARAM = "{deviceId}";
-	public static final String GROUP_ID_PARAM = "{groupId}";
 	public static final String CLIENT_TYPE_QUERY = "deviceClientType";
 	public static final String PAGE_SIZE_QUERY = "pageSize";
 	public static final String ITEMS_FIELD = "items";
