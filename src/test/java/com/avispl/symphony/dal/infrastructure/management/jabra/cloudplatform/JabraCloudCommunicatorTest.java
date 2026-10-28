@@ -25,6 +25,7 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.com
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.common.constants.Constant;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.adapter.ClientTypeFilter;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.aggregated.SettingProperty;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.FieldOfView;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.SafetyCapacityNotification;
 import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.types.settings.SettingsRevertToDefault;
 
@@ -42,10 +43,10 @@ class JabraCloudCommunicatorTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		this.jabraCloudCommunicator = new JabraCloudCommunicator();
-		this.jabraCloudCommunicator.setHost("");
+		this.jabraCloudCommunicator.setHost("localhost");
 		this.jabraCloudCommunicator.setPort(443);
 		this.jabraCloudCommunicator.setLogin("");
-		this.jabraCloudCommunicator.setPassword("");
+		this.jabraCloudCommunicator.setPassword("test-subscription-key-12345");
 		this.jabraCloudCommunicator.init();
 		this.jabraCloudCommunicator.connect();
 	}
@@ -59,7 +60,7 @@ class JabraCloudCommunicatorTest {
 	@Test
 	void testGetMultipleStatistics() throws Exception {
 		this.jabraCloudCommunicator.setConfigManagement(true);
-		this.jabraCloudCommunicator.setClientTypeFilter(ClientTypeFilter.UNDEFINED.getName());
+		this.jabraCloudCommunicator.setClientTypeFilter(ClientTypeFilter.ALL.getName());
 		this.jabraCloudCommunicator.setDevicesInterval(Duration.ofSeconds(30).toMillis());
 		this.jabraCloudCommunicator.setRoomsInterval(Duration.ofSeconds(180).toMillis());
 		System.out.println("Start the first getMultipleStatistics()");
@@ -109,7 +110,7 @@ class JabraCloudCommunicatorTest {
 
 	@Test
 	void testRetrieveMultipleStatistics() throws Exception {
-		this.jabraCloudCommunicator.setClientTypeFilter(ClientTypeFilter.UNDEFINED.getName());
+		this.jabraCloudCommunicator.setClientTypeFilter(ClientTypeFilter.ALL.getName());
 		this.jabraCloudCommunicator.setDeviceSettingsInterval(Duration.ofSeconds(30).toMillis());
 		this.extendedStatistics = (ExtendedStatistics) this.jabraCloudCommunicator.getMultipleStatistics().get(0);
 		System.out.println("Start the first retrieveMultipleStatistics()");
@@ -140,11 +141,27 @@ class JabraCloudCommunicatorTest {
 
 	@Test
 	void testApplySettingsToDeviceControl() throws Exception {
-		//	Set up the statistics
+		//	Enable settings display and config management so the data loader fetches device settings
+		//	and retrieveMultipleStatistics() populates getProperties() with Settings#* keys.
+		//	Without setDisplayPropertyGroups(), shouldDisplayGroup(AGGREGATED_SETTINGS_GROUP) returns
+		//	false and settings are never fetched or processed.
+		this.jabraCloudCommunicator.setConfigManagement(true);
+		this.jabraCloudCommunicator.setDisplayPropertyGroups(Constant.AGGREGATED_SETTINGS_GROUP);
+
+		//	Set up the statistics — two cycles needed so the adapter populates aggregated device data
 		this.jabraCloudCommunicator.getMultipleStatistics();
 		this.jabraCloudCommunicator.retrieveMultipleStatistics();
 		Util.delayExecution(10000);
-		String deviceId = "DD9ECD6296804500D744A03C47526EA8B7C0A1C68";
+
+		//	Resolve the first PanaCast 50 device ID dynamically from the retrieved device list.
+		//	The simulator generates UUIDs on every startup, so a hardcoded ID would break on restart.
+		//	Previously: String deviceId = "DD9ECD6296804500D744A03C47526EA8B7C0A1C68";
+		String deviceId = this.jabraCloudCommunicator.retrieveMultipleStatistics().stream()
+				.filter(aggregatedDevice -> aggregatedDevice.getProperties() != null
+						&& aggregatedDevice.getProperties().containsKey(Constant.AGGREGATED_SETTINGS_GROUP + Constant.HASH_SYMBOL + SettingProperty.SETTINGS_REVERT_TO_DEFAULT.getName()))
+				.map(AggregatedDevice::getDeviceId)
+				.findFirst()
+				.orElseThrow(() -> new IllegalStateException("No device with settings found — ensure the simulator is running and has PanaCast 50 devices seeded"));
 
 		//	Testing the changes settings
 		ControllableProperty settingProperty1 = new ControllableProperty();
@@ -157,6 +174,15 @@ class JabraCloudCommunicatorTest {
 		settingProperty2.setValue(SafetyCapacityNotification.WHEN_VIDEOS_IS_ENABLE.getName());
 		settingProperty2.setDeviceId(deviceId);
 		this.jabraCloudCommunicator.controlProperty(settingProperty2);
+		ControllableProperty settingProperty3 = new ControllableProperty();
+		//	FIELD_OF_VIEW.getName() = "FieldOfView(deg)" — the (deg) suffix is a UI display label, not the property key.
+		//	The key in getProperties() is normalizeSettingPropertyName(apiField) = "FieldOfView".
+		//	Using getName() here causes containsKey() to miss and controlProperty() to denormalize to "fieldOfView(deg)".
+		String fieldOfViewKey = Character.toUpperCase(SettingProperty.FIELD_OF_VIEW.getApiField().charAt(0)) + SettingProperty.FIELD_OF_VIEW.getApiField().substring(1);
+		settingProperty3.setProperty(String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, fieldOfViewKey));
+		settingProperty3.setValue(FieldOfView.D120.getName());
+		settingProperty3.setDeviceId(deviceId);
+		this.jabraCloudCommunicator.controlProperty(settingProperty3);
 
 		Map<String, String> properties = this.jabraCloudCommunicator.retrieveMultipleStatistics().stream()
 				.filter(aggregatedDevice -> aggregatedDevice.getDeviceId().equals(deviceId)).findFirst()
@@ -169,6 +195,10 @@ class JabraCloudCommunicatorTest {
 					if (p.containsKey(settingProperty2.getProperty())) {
 						m.put(settingProperty2.getProperty(), p.get(settingProperty2.getProperty()));
 					}
+					String fovProp = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, fieldOfViewKey);
+					if (p.containsKey(fovProp)) {
+						m.put(fovProp, p.get(fovProp));
+					}
 					return m;
 				}).orElseGet(Collections::emptyMap);
 		this.verifyStatistics(properties);
@@ -179,6 +209,24 @@ class JabraCloudCommunicatorTest {
 		changesProperty.setValue(Constant.NOT_AVAILABLE);
 		changesProperty.setDeviceId(deviceId);
 		this.jabraCloudCommunicator.controlProperty(changesProperty);
+
+		Map<String, String> upproperties = this.jabraCloudCommunicator.retrieveMultipleStatistics().stream()
+				.filter(aggregatedDevice -> aggregatedDevice.getDeviceId().equals(deviceId)).findFirst()
+				.map(AggregatedDevice::getProperties)
+				.map(p -> {
+					Map<String, String> m = new HashMap<>();
+					if (p.containsKey(settingProperty1.getProperty())) {
+						m.put(settingProperty1.getProperty(), p.get(settingProperty1.getProperty()));
+					}
+					if (p.containsKey(settingProperty2.getProperty())) {
+						m.put(settingProperty2.getProperty(), p.get(settingProperty2.getProperty()));
+					}
+					String fovProp = String.format(Constant.PROPERTY_FORMAT, Constant.AGGREGATED_SETTINGS_GROUP, fieldOfViewKey);
+					if (p.containsKey(fovProp)) {
+						m.put(fovProp, p.get(fovProp));
+					}
+					return m;
+				}).orElseGet(Collections::emptyMap);
 	}
 
 	private void verifyStatistics(Map<String, String> statistics) {

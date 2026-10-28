@@ -1019,9 +1019,11 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 					settingDescriptor = settingsDescriptors.get(setting.getName());
 					if (settingDescriptor == null) {
 						addDeviceControl(controllableProperties, createNumeric(entry.getKey(), setting.getValue().toString()));
-					} else {
-						SettingDescriptor.NumberValuespace numberValuespace = (SettingDescriptor.NumberValuespace) settingDescriptor.valuespace();
-						addDeviceControl(controllableProperties, createSlider(entry.getKey(), (float) numberValuespace.min(), (float) numberValuespace.max(), Float.valueOf(setting.getValue().toString())));
+					} else if (settingDescriptor.valuespace() instanceof SettingDescriptor.NumberValuespace numberValuespace) {
+						float numericValue = Float.parseFloat(setting.getValue().toString());
+						if (numericValue >= numberValuespace.min() && numericValue <= numberValuespace.max()) {
+							addDeviceControl(controllableProperties, createSlider(entry.getKey(), (float) numberValuespace.min(), (float) numberValuespace.max(), numericValue));
+						}
 					}
 					break;
 				default:
