@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform</groupId>
   <artifactId>symphony-dal-infrastructure-management-jabra-cloudplatform</artifactId>
-  <version>1.2.0</version>
+  <version>1.2.1</version>
   <properties>
     <symphonyApiVersion>RELEASE</symphonyApiVersion>
     <timestamp>${maven.build.timestamp}</timestamp>
@@ -174,7 +174,7 @@
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
-      <version>2.20.1</version>
+      <version>2.21.5</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
