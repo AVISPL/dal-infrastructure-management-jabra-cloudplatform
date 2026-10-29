@@ -8,7 +8,6 @@ import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.mod
 import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpOutputMessage;
 import org.springframework.http.MediaType;
@@ -110,67 +109,60 @@ public class JabraSettingsValuespaceHttpMessageConverter implements GenericHttpM
         }
 
 
-        ArrayNode listSettings = (ArrayNode)settingsNodeRaw.at("/listSettings"); //dropdowns
-        ArrayNode stringSettings = (ArrayNode)settingsNodeRaw.at("/stringSettings"); //numeric-sliders
-        ArrayNode numberSettings = (ArrayNode)settingsNodeRaw.at("/numberSettings"); //numeric-sliders
-
         Map<String, SettingDescriptor> settingDescriptorMap = new HashMap<>();
-        for(JsonNode props: listSettings) {
-            String settingId = props.at("/settingId").asText();
-            if (StringUtils.isNullOrEmpty(settingId)) {
-                continue;
-            }
-            String settingIdInternal = settingIdsReverse.get(settingId);
-            ArrayNode supportedValuesRaw = (ArrayNode)props.at("/supportedValues");
-            List<String> supportedValues = new ArrayList<>();
-            supportedValuesRaw.forEach(jsonNode -> supportedValues.add(jsonNode.asText()));
+        collectDescriptors(settingsNodeRaw, settingIdsReverse, settingDescriptorMap);
 
-            boolean requiresRestart = props.get("requiresRestart").asBoolean();
-            SettingDescriptor.DropdownValuespace dropdownValuespace = new SettingDescriptor.DropdownValuespace(requiresRestart, supportedValues);
-            SettingDescriptor settingDescriptor = new SettingDescriptor(dropdownValuespace);
-            settingDescriptorMap.put(settingIdInternal, settingDescriptor);
-        }
-
-        for(JsonNode props: stringSettings) {
-            String settingId = props.at("/settingId").asText();
-            if (StringUtils.isNullOrEmpty(settingId)) {
-                continue;
+        JsonNode compositeSettings = settingsNodeRaw.path("compositeSettings");
+        if (compositeSettings.isArray()) {
+            for (JsonNode compositeSetting : compositeSettings) {
+                collectDescriptors(compositeSetting, settingIdsReverse, settingDescriptorMap);
             }
-            String settingIdInternal = settingIdsReverse.get(settingId);
-
-            JsonNode minLength = props.get("minimumLength");
-            JsonNode maxLength = props.get("maximumLength");
-            boolean requiresRestart = props.get("requiresRestart").asBoolean();
-            SettingDescriptor settingDescriptor;
-            if (minLength != null && maxLength != null) {
-                SettingDescriptor.TextValuespace textValuespace = new SettingDescriptor.TextValuespace(requiresRestart, minLength.asInt(), maxLength.asInt());
-                 settingDescriptor = new SettingDescriptor(textValuespace);
-            } else {
-                continue;
-            }
-            settingDescriptorMap.put(settingIdInternal, settingDescriptor);
-        }
-
-        for(JsonNode props: numberSettings) {
-            String settingId = props.at("/settingId").asText();
-            if (StringUtils.isNullOrEmpty(settingId)) {
-                continue;
-            }
-            String settingIdInternal = settingIdsReverse.get(settingId);
-
-            JsonNode minValue = props.get("minimumValue");
-            JsonNode maxValue = props.get("maximumValue");
-            boolean requiresRestart = props.get("requiresRestart").asBoolean();
-            SettingDescriptor settingDescriptor;
-            if (minValue != null && maxValue != null) {
-                SettingDescriptor.NumberValuespace numberValuespace = new SettingDescriptor.NumberValuespace(requiresRestart, minValue.asInt(), maxValue.asInt());
-                settingDescriptor = new SettingDescriptor(numberValuespace);
-            } else {
-                continue;
-            }
-            settingDescriptorMap.put(settingIdInternal, settingDescriptor);
         }
         return new SettingsValuespace(settingDescriptorMap);
+    }
+
+    /**
+     * Adds descriptors for the listSettings, stringSettings and numberSettings arrays of a settings container.
+     * Entries with an unknown settingId, or string and number entries without both bounds, are skipped.
+     *
+     * @param container node holding the listSettings, stringSettings and numberSettings arrays
+     * @param settingIdsReverse map of Jabra setting IDs to setting names
+     * @param target map receiving the descriptors, keyed by setting name
+     */
+    private void collectDescriptors(JsonNode container, Map<String, String> settingIdsReverse,
+                                    Map<String, SettingDescriptor> target) {
+        for (JsonNode props : container.path("listSettings")) {
+            String settingName = settingIdsReverse.get(props.path("settingId").asText());
+            if (StringUtils.isNullOrEmpty(settingName)) {
+                continue;
+            }
+            List<String> supportedValues = new ArrayList<>();
+            props.path("supportedValues").forEach(jsonNode -> supportedValues.add(jsonNode.asText()));
+            boolean requiresRestart = props.path("requiresRestart").asBoolean();
+            target.put(settingName, new SettingDescriptor(new SettingDescriptor.DropdownValuespace(requiresRestart, supportedValues)));
+        }
+
+        for (JsonNode props : container.path("stringSettings")) {
+            String settingName = settingIdsReverse.get(props.path("settingId").asText());
+            JsonNode minLength = props.get("minimumLength");
+            JsonNode maxLength = props.get("maximumLength");
+            if (StringUtils.isNullOrEmpty(settingName) || minLength == null || maxLength == null) {
+                continue;
+            }
+            boolean requiresRestart = props.path("requiresRestart").asBoolean();
+            target.put(settingName, new SettingDescriptor(new SettingDescriptor.TextValuespace(requiresRestart, minLength.asInt(), maxLength.asInt())));
+        }
+
+        for (JsonNode props : container.path("numberSettings")) {
+            String settingName = settingIdsReverse.get(props.path("settingId").asText());
+            JsonNode minValue = props.get("minimumValue");
+            JsonNode maxValue = props.get("maximumValue");
+            if (StringUtils.isNullOrEmpty(settingName) || minValue == null || maxValue == null) {
+                continue;
+            }
+            boolean requiresRestart = props.path("requiresRestart").asBoolean();
+            target.put(settingName, new SettingDescriptor(new SettingDescriptor.NumberValuespace(requiresRestart, minValue.asInt(), maxValue.asInt())));
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
