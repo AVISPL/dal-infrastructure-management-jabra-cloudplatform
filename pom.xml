@@ -106,14 +106,14 @@
       <artifactId>symphony-api-dal</artifactId>
       <version>${symphonyApiVersion}</version>
       <scope>system</scope>
-      <systemPath>${basedir}/lib/symphony-api-dal-6.5.0.jar</systemPath>
+      <systemPath>${basedir}/lib/symphony-api-dal-6.5.0-CTC-SNAPSHOT.jar</systemPath>
     </dependency>
     <dependency>
       <groupId>com.avispl.symphony.dal</groupId>
       <artifactId>symphony-dal-commons</artifactId>
       <version>${symphonyApiVersion}</version>
       <scope>system</scope>
-      <systemPath>${basedir}/lib/symphony-dal-commons-6.6.0.jar</systemPath>
+      <systemPath>${basedir}/lib/symphony-dal-commons-6.10.0.2611051051.jar</systemPath>
     </dependency>
     <dependency>
       <groupId>com.avispl.symphony.api</groupId>

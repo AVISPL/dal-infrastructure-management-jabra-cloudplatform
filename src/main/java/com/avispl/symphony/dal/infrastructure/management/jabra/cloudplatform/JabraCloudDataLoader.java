@@ -129,7 +129,9 @@ public class JabraCloudDataLoader implements Runnable {
 									.filter(f -> !existingIds.contains(f.getId()))
 									.forEach(this.devices::add);
 						}
-					} catch (Exception e) {
+					} catch (Throwable e) {
+						// Throwable, not Exception: a LinkageError (SDK version mismatch with the host) would otherwise end this
+						// task silently — it runs via ExecutorService.submit(), which swallows it — and device collection stops
 						logger.error("Unable to retrieve devices list metadata.", e);
 					}
 				}

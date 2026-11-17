@@ -28,6 +28,9 @@ import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.avispl.symphony.api.dal.webhook.WebhookEnabled;
+import com.avispl.symphony.api.dal.webhook.WebhookEvent;
+import com.avispl.symphony.dal.infrastructure.management.jabra.cloudplatform.webhook.JabraWebhookEvent;
 import javax.security.auth.login.FailedLoginException;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
@@ -77,7 +80,7 @@ import static com.avispl.symphony.dal.util.ControllablePropertyFactory.*;
  * @author Kevin / Symphony Dev Team
  * @since 1.0.0
  */
-public class JabraCloudCommunicator extends RestCommunicator implements Monitorable, Controller, Aggregator {
+public class JabraCloudCommunicator extends RestCommunicator implements Monitorable, Controller, Aggregator, WebhookEnabled {
 	private static final Set<String> DEFAULT_GRAPH_PROPERTIES = new HashSet<>(Arrays.asList(
 			GeneralProperty.LAST_MONITORING_CYCLE_DURATION.getName(),
 			GeneralProperty.MONITORED_DEVICES_TOTAL.getName()
@@ -189,6 +192,31 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
     private final JabraCloudRequestInterceptor jabraCloudRequestInterceptor = new JabraCloudRequestInterceptor();
     private final JabraSettingsHttpMessageConverter jabraSettingsHttpMessageConterter = new JabraSettingsHttpMessageConverter();
     private final JabraSettingsValuespaceHttpMessageConverter jabraSettingsValuespaceHttpMessageConverter = new JabraSettingsValuespaceHttpMessageConverter();
+
+	// ---- webhooks (CTC phase 2; hosted by symphony-dal-cloud only)
+	/**
+	 * Connection status reported by webhook events, per Jabra device id. Wins over the cached room data until a rooms
+	 * retrieval at least {@link #WEBHOOK_OVERRIDE_SETTLE_MS} after the event shows the API has caught up.
+	 */
+	private final Map<String, ConnectionOverride> webhookConnectionOverrides = new ConcurrentHashMap<>();
+	/** Highest webhook sequence already folded in: redeliveries (at-least-once) are skipped. */
+	private volatile long lastDigestedSequence;
+	/** When the last rooms retrieval ran (rooms carry the API's own connection status). */
+	private volatile long lastRoomsRetrievalAt;
+	/** Time Jabra's API is given to reflect a pushed change before its data replaces the webhook's. */
+	static final long WEBHOOK_OVERRIDE_SETTLE_MS = 60_000L;
+	/** Hosts the validation GET may go to: the URL comes from untrusted input, so it never reaches arbitrary hosts. */
+	static final String VALIDATION_HOST_SUFFIX = ".jabra.com";
+
+	private static final class ConnectionOverride {
+		final String status;
+		final long at;
+
+		ConnectionOverride(String status, long at) {
+			this.status = status;
+			this.at = at;
+		}
+	}
 
 	public JabraCloudCommunicator() {
 		this.reentrantLock = new ReentrantLock();
@@ -456,6 +484,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			}
 			return Collections.emptyList();
 		}
+		this.applyWebhookConnectionOverrides();
 		List<AggregatedDevice> aggregatedDevices = new ArrayList<>();
 		this.devices.forEach(device -> {
 			AggregatedDevice aggregatedDevice = new AggregatedDevice();
@@ -500,6 +529,144 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 
 		updateDeviceSettingsMode();
 		return this.localAggregatedDevices;
+	}
+
+	/**
+	 * Folds Jabra Plus webhook events into the adapter's state; the next {@link #retrieveMultipleStatistics()} reports it.
+	 * <ul>
+	 * <li>status online / offline: that device's connection status, effective at once (no waiting for the rooms
+	 * interval);</li>
+	 * <li>status rebooted: online, plus an early devices + rooms retrieval;</li>
+	 * <li>firmware updated: the new version if the event carries it, plus an early devices retrieval;</li>
+	 * <li>validation: the activation GET to {@code validationUrl} (https, {@code *.jabra.com} only).</li>
+	 * </ul>
+	 * Redeliveries are skipped by sequence. An unparseable or unknown event is logged and skipped rather than thrown:
+	 * it would never parse on redelivery either, and must not hold back the rest of the batch.
+	 */
+	@Override
+	public void digest(List<WebhookEvent> events) throws Exception {
+		long highest = this.lastDigestedSequence;
+		for (WebhookEvent event : events) {
+			if (event.getSequence() <= this.lastDigestedSequence) {
+				continue; // already folded in (at-least-once redelivery)
+			}
+			highest = Math.max(highest, event.getSequence());
+			JabraWebhookEvent parsed;
+			try {
+				parsed = JabraWebhookEvent.parse(this.objectMapper, event.getBody());
+			} catch (IllegalArgumentException e) {
+				this.logger.warn(String.format("Webhook event %s skipped: %s", event.getSequence(), e.getMessage()));
+				continue;
+			}
+			long at = parsed.getOccurredAt() != null ? parsed.getOccurredAt().toEpochMilli()
+					: event.getReceivedAt() != null ? event.getReceivedAt().getTime() : System.currentTimeMillis();
+			switch (parsed.getType()) {
+				case VALIDATION:
+					this.activateWebhook(parsed.getValidationUrl());
+					break;
+				case STATUS_CHANGED:
+					this.applyStatusEvent(event.getSequence(), parsed, at);
+					break;
+				case FIRMWARE_UPDATED:
+					this.applyFirmwareEvent(event.getSequence(), parsed);
+					break;
+				default:
+					this.logger.info(String.format("Webhook event %s of type %s ignored", event.getSequence(), parsed.getRawType()));
+			}
+		}
+		this.lastDigestedSequence = highest;
+	}
+
+	private void applyStatusEvent(long sequence, JabraWebhookEvent event, long at) {
+		String deviceId = this.resolveDeviceId(event);
+		if (deviceId == null) {
+			this.logger.warn(String.format("Webhook status event %s for unknown device (id %s, serial %s) skipped", sequence, event.getDeviceId(),
+					event.getSerialNumber()));
+			return;
+		}
+		String status = event.getStatus();
+		if ("offline".equals(status)) {
+			this.webhookConnectionOverrides.put(deviceId, new ConnectionOverride("Offline", at));
+		} else if ("online".equals(status) || "rebooted".equals(status)) {
+			this.webhookConnectionOverrides.put(deviceId, new ConnectionOverride("Online", at));
+			if ("rebooted".equals(status)) {
+				this.getIntervalSettingByType(RetrievalType.DEVICES).expedite();
+				this.getIntervalSettingByType(RetrievalType.ROOMS).expedite();
+			}
+		} else {
+			this.logger.info(String.format("Webhook status event %s with status '%s' ignored", sequence, status));
+			return;
+		}
+		this.logger.info(String.format("Webhook event %s: device %s is %s", sequence, deviceId, status));
+	}
+
+	private void applyFirmwareEvent(long sequence, JabraWebhookEvent event) {
+		String deviceId = this.resolveDeviceId(event);
+		if (deviceId != null && StringUtils.isNotNullOrEmpty(event.getFirmwareVersion())) {
+			this.devices.stream().filter(d -> deviceId.equals(d.getId())).findFirst().ifPresent(d -> {
+				d.setFirmwareVersion(event.getFirmwareVersion());
+				d.setFirmwareUpdateInProgress(Boolean.FALSE);
+			});
+		}
+		this.getIntervalSettingByType(RetrievalType.DEVICES).expedite();
+		this.logger.info(String.format("Webhook event %s: firmware updated on device %s%s", sequence, deviceId,
+				event.getFirmwareVersion() == null ? "" : " to " + event.getFirmwareVersion()));
+	}
+
+	/** Event's device id if it's one of ours, else the device matching its serial number; {@code null} if neither. */
+	private String resolveDeviceId(JabraWebhookEvent event) {
+		for (Device d : this.devices) {
+			if (event.getDeviceId() != null && event.getDeviceId().equals(d.getId())) {
+				return d.getId();
+			}
+		}
+		for (Device d : this.devices) {
+			if (event.getSerialNumber() != null && event.getSerialNumber().equalsIgnoreCase(d.getSerialNumber())) {
+				return d.getId();
+			}
+		}
+		return null;
+	}
+
+	private void applyWebhookConnectionOverrides() {
+		if (this.webhookConnectionOverrides.isEmpty()) {
+			return;
+		}
+		this.devices.forEach(device -> {
+			ConnectionOverride o = this.webhookConnectionOverrides.get(device.getId());
+			if (o != null) {
+				device.setDeviceConnectionStatus(o.status);
+			}
+		});
+	}
+
+	/** Jabra's activation handshake: GET {@code validationUrl} (within 10 minutes of the webhook's creation). */
+	private void activateWebhook(String validationUrl) {
+		java.net.URI uri;
+		try {
+			uri = java.net.URI.create(validationUrl == null ? "" : validationUrl.trim());
+		} catch (IllegalArgumentException e) {
+			this.logger.warn("Webhook validation event with an invalid validationUrl skipped");
+			return;
+		}
+		String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
+		if (!"https".equalsIgnoreCase(uri.getScheme()) || !(host.endsWith(VALIDATION_HOST_SUFFIX) || host.equals(VALIDATION_HOST_SUFFIX.substring(1)))) {
+			this.logger.warn(String.format("Webhook validation to %s refused: only https://*%s is allowed", host, VALIDATION_HOST_SUFFIX));
+			return;
+		}
+		try {
+			java.net.HttpURLConnection connection = (java.net.HttpURLConnection) uri.toURL().openConnection();
+			connection.setRequestMethod("GET");
+			connection.setConnectTimeout(10_000);
+			connection.setReadTimeout(10_000);
+			connection.setInstanceFollowRedirects(false);
+			int code = connection.getResponseCode();
+			connection.disconnect();
+			this.logger.info(String.format("Webhook validation GET to %s: HTTP %s", host, code));
+		} catch (IOException e) {
+			// not rethrown: the handshake is one-shot, a redelivery wouldn't make it pass; Jabra lets the admin retry
+			this.logger.error(String.format("Webhook validation GET to %s failed: %s", host, e.getMessage()));
+		}
 	}
 
 	@Override
@@ -744,6 +911,8 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 				this.rooms.add(room);
 				this.devicesRooms.addAll(Optional.ofNullable(room.getDevices()).orElse(new ArrayList<>()));
 			}
+			this.lastRoomsRetrievalAt = System.currentTimeMillis();
+			this.webhookConnectionOverrides.values().removeIf(o -> this.lastRoomsRetrievalAt - o.at >= WEBHOOK_OVERRIDE_SETTLE_MS);
 		}
 		//	Update data for this.devices
 		this.devices.forEach(device -> {
@@ -760,6 +929,7 @@ public class JabraCloudCommunicator extends RestCommunicator implements Monitora
 			device.setRoomType(room.getType());
 			device.setRoomLocation(room.getLocationName());
 		});
+		this.applyWebhookConnectionOverrides();
 		this.requestStateHandler.verifyRequestState();
 	}
 
