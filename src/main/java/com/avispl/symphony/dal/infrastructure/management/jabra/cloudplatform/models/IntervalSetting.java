@@ -58,6 +58,14 @@ public class IntervalSetting {
 	 *
 	 * @return a message describing how many seconds remain until the next retrieval is allowed.
 	 */
+	/**
+	 * Makes the next retrieval available immediately (a webhook event said the data changed), instead of waiting for the
+	 * rest of the interval. The interval applies again from that retrieval on.
+	 */
+	public void expedite() {
+		this.validRetrievalTimestamp = System.currentTimeMillis();
+	}
+
 	public String getNextAvailabilityInfo() {
 		long seconds = Math.max((this.validRetrievalTimestamp - System.currentTimeMillis()) / 1000, 0);
 		return String.format("Next availability in %s seconds.", seconds);
